@@ -646,30 +646,25 @@ class Push():
 
     def _compress_image_cv2(self, img_bytes: bytes) -> Tuple[Optional[bytes], Optional[str]]:
         """
-        用cv2将图片压缩为JPG或低质量JPG，确保≤2MB
-        只考虑走jpg压缩，不考虑png(png一般比jpg大)
+        用cv2将图片压缩,确保≤2MB, 只考虑走jpg,不考虑png(png一般比jpg大)
         """
         try:
             import cv2
             import numpy as np
         except ImportError:
-            self.log_error("图片压缩失败，请安装opencv-python和numpy！")
+            self.log_error("图片压缩失败,请安装opencv-python和numpy!")
             return None, None
         try:
             img_array = np.frombuffer(img_bytes, np.uint8)
             img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
             if img is None:
                 return None, None
-            # 先高质量
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 85]
-            result, encimg = cv2.imencode('.jpg', img, encode_param)
-            if result and len(encimg) <= 2 * 1024 * 1024:
-                return encimg.tobytes(), '85'
-            # 再低质量
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 30]
-            result, encimg = cv2.imencode('.jpg', img, encode_param)
-            if result and len(encimg) <= 2 * 1024 * 1024:
-                return encimg.tobytes(), '30'
+            # 渐进式尝试多种质量，提升命中率
+            for q in (85, 70, 60, 50, 40, 30):
+                encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), q, int(cv2.IMWRITE_JPEG_OPTIMIZE), 1]
+                ok, encimg = cv2.imencode('.jpg', img, encode_param)
+                if ok and encimg.nbytes <= 2 * 1024 * 1024:
+                    return encimg.tobytes(), str(q)
             return None, None
         except Exception as e:
             self.log_error(f"cv2图片压缩异常: {e}")
