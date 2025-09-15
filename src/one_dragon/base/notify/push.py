@@ -1238,7 +1238,11 @@ class Push():
             'PUSH_PLUS': 'pushplus_bot',
             'WE_PLUS_BOT': 'weplus_bot',
             'QMSG': 'qmsg_bot',
-            'QYWX': 'wecom_app',
+            'QYWX': None,              # 由配置动态决定
+            'QYWX_APP': 'wecom_app',   # 显式指向 APP 通道（别名）
+            'QYWX_AM': 'wecom_app',    # 若 UI 直接传配置键名
+            'QYWX_BOT': 'wecom_bot',
+            'QYWX_KEY': 'wecom_bot',
             'DISCORD': 'discord_bot',
             'TG': 'telegram_bot',
             'AIBOTK': 'aibotk',
@@ -1251,6 +1255,13 @@ class Push():
         }
 
         target_function_name = method_to_function_name.get(method)
+        if method == 'QYWX':
+            if self.get_config("QYWX_KEY"):
+                target_function_name = 'wecom_bot'
+            elif self.get_config("QYWX_AM"):
+                target_function_name = 'wecom_app'
+            else:
+                raise ValueError("QYWX 未配置 QYWX_KEY 或 QYWX_AM")
         if not target_function_name:
             raise ValueError(f"未支持的推送方式: {method}")
 
