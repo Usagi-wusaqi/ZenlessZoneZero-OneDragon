@@ -1184,16 +1184,13 @@ class Push():
 
 
     def get_config(self, key: str):
-        """获取推送配置值，自动判空和类型转换"""
+        """获取推送配置值，布尔值转为'true'/'false'字符串，其他类型转字符串，None返回空字符串，兼容所有推送方式的字符串比较"""
         value = getattr(self.ctx.push_config, key.lower(), None)
-        # 若为 None，返回空字符串，避免 NoneType 错误
         if value is None:
             return ""
-        # 若为 bool，转为字符串
         if isinstance(value, bool):
-            return str(value).lower()
-        # 其他类型直接返回
-        return value
+            return "true" if value else "false"
+        return str(value)
 
 
     def send(self, content: str, image: Optional[BytesIO] = None, test_method: Optional[str] = None) -> None:
