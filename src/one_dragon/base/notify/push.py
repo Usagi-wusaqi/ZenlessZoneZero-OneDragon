@@ -1183,13 +1183,8 @@ class Push():
 
 
     def get_config(self, key: str):
-        """获取推送配置值，布尔值转为'true'/'false'字符串，其他类型转字符串，None返回空字符串，兼容所有推送方式的字符串比较"""
-        value = getattr(self.ctx.push_config, key.lower(), None)
-        if value is None:
-            return ""
-        if isinstance(value, bool):
-            return "true" if value else "false"
-        return str(value)
+        """获取推送配置值"""
+        return getattr(self.ctx.push_config, key.lower(), None)
 
 
     def send(self, content: str, image: Optional[BytesIO] = None, test_method: Optional[str] = None) -> None:
