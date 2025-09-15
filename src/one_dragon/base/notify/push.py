@@ -569,9 +569,9 @@ class Push():
 
     def wecom_bot(self, title: str, content: str, image: Optional[BytesIO]) -> None:
         """
-        企业微信机器人推送：
+        企业微信机器人推送:
         - 文本直接推送
-        - 图片：JPG/PNG 且≤2MB直接 base64+md5，无需依赖；否则用cv2压缩为jpg
+        - 图片: JPG/PNG 且 <= 2MB 直接 base64+md5, 否则用 cv2 压缩为 jpg
         """
         self.log_info("企业微信机器人服务启动")
 
@@ -601,7 +601,7 @@ class Push():
             img_bytes = image.getvalue()
             img_format = self._detect_image_format(img_bytes)
             if img_format in ('jpeg', 'png') and len(img_bytes) <= 2 * 1024 * 1024:
-                # 直接推送，无需依赖
+                # 正常情况(格式和大小符合要求)，可直接推送，无需依赖
                 img_base64 = base64.b64encode(img_bytes).decode('utf-8')
                 img_md5 = self._md5(img_bytes)
                 img_data = {
@@ -616,8 +616,10 @@ class Push():
                         self.log_error(f"企业微信机器人图片推送失败! {resp}")
                 except requests.exceptions.RequestException as e:
                     self.log_error(f"企业微信机器人图片推送异常: {e}")
+                except ValueError as e:
+                    self.log_error(f"企业微信机器人图片推送异常(JSON): {e}")
             else:
-                # 其他情况（如格式不明、超限等）走压缩分支
+                # 其他情况(格式或大小不符要求),走压缩分支.依赖 cv2
                 img_bytes_c, img_quality = self._compress_image_cv2(img_bytes)
                 if not img_bytes_c:
                     self.log_error("图片处理失败, 未发送图片!")
@@ -639,11 +641,13 @@ class Push():
                         self.log_error(f"企业微信机器人图片推送失败! {resp}")
                 except requests.exceptions.RequestException as e:
                     self.log_error(f"企业微信机器人图片推送异常: {e}")
+                except ValueError as e:
+                    self.log_error(f"企业微信机器人图片推送异常(JSON): {e}")
 
     def _compress_image_cv2(self, img_bytes: bytes) -> Tuple[Optional[bytes], Optional[str]]:
         """
-        用cv2将图片压缩为JPG或低质量JPG，确保≤2MB。
-        只考虑jpg压缩，不处理png。
+        用cv2将图片压缩为JPG或低质量JPG，确保≤2MB
+        只考虑走jpg压缩，不考虑png(png一般比jpg大)
         """
         try:
             import cv2
