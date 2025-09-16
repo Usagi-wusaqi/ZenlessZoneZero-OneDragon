@@ -15,7 +15,7 @@ from io import BytesIO
 from email.mime.text import MIMEText
 from email.header import Header
 from email.utils import formataddr
-from typing import Optional, Tuple
+from typing import Optional
 
 from one_dragon.base.operation.one_dragon_context import OneDragonContext
 from one_dragon.utils.log_utils import log
@@ -644,7 +644,7 @@ class Push():
                 except ValueError as e:
                     self.log_error(f"企业微信机器人图片推送异常(JSON): {e}")
 
-    def _compress_image_cv2(self, img_bytes: bytes) -> Tuple[Optional[bytes], Optional[str]]:
+    def _compress_image_cv2(self, img_bytes: bytes):
         """
         用cv2将图片压缩,确保≤2MB, 只考虑走jpg,不考虑png(png一般比jpg大)
         """
@@ -693,8 +693,7 @@ class Push():
 
 
     def _md5(self, b: bytes) -> str:
-        # 计算图片内容的 MD5，用于企业微信机器人图片推送
-        import hashlib
+        # 计算图片内容的 MD5，用于企业微信机器人图片推送（接口强制要求）
         return hashlib.md5(b).hexdigest()
 
     def _detect_image_format(self, b: bytes) -> Optional[str]:
@@ -1188,7 +1187,7 @@ class Push():
         ):
             notify_function.append(self.wxpusher_bot)
         if not notify_function:
-            self.log_error(f"无推送渠道，请检查通知设置是否正确")
+            self.log_error("无推送渠道,请检查通知设置是否正确")
         return notify_function
 
 
