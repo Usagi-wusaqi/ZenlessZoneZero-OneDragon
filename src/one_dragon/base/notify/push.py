@@ -659,13 +659,33 @@ class Push():
             img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
             if img is None:
                 return None, None
-            # 渐进式尝试多种质量，提升命中率
-            for q in (85, 70, 60, 50, 40, 30):
-                encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), q, int(cv2.IMWRITE_JPEG_OPTIMIZE), 1]
-                ok, encimg = cv2.imencode('.jpg', img, encode_param)
-                if ok and encimg.nbytes <= 2 * 1024 * 1024:
-                    return encimg.tobytes(), str(q)
-            return None, None
+            # 二分搜索质量，尽量贴近 2MB
+            lo, hi = 30, 90
+            best = None
+            while lo <= hi:
+                q = (lo + hi) // 2
+                encode_param = [
+                    int(cv2.IMWRITE_JPEG_QUALITY), q,
+                    int(cv2.IMWRITE_JPEG_OPTIMIZE), 1,
+                    int(cv2.IMWRITE_JPEG_PROGRESSIVE), 1
+                ]
+                try:
+                    ok, encimg = cv2.imencode('.jpg', img, encode_param)
+                except cv2.error as e:
+                    self.log_error(f"cv2图片压缩异常: {e}")
+                    break
+                if not ok:
+                    break
+                size = encimg.nbytes
+                if size <= 2 * 1024 * 1024:
+                    best = (encimg.tobytes(), q)
+                    lo = q + 1
+                else:
+                    hi = q - 1
+            if best:
+                return best[0], str(best[1])
+            else:
+                return None, None
         except Exception as e:
             self.log_error(f"cv2图片压缩异常: {e}")
             return None, None
