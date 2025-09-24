@@ -33,9 +33,10 @@ class SuibianTempleYumChaSin(ZOperation):
         """
         随便观 - 饮茶仙
 
-        需要在饮茶仙画面时候调用，完成后返回随便观主界面
+        需要在随便观主界面时候调用，完成后返回随便观主界面
 
         操作步骤
+        0. 进入饮茶仙画面
         1. 切换到 定期采买
         2. 不断点击 提交、刷新
         3. 遍历采办清单 点红色(缺少)材料
@@ -60,7 +61,26 @@ class SuibianTempleYumChaSin(ZOperation):
         self.done_craft: bool = False  #  是否进行了制造
         self.skip_adventure: bool = False  # 已经无法再派遣了 后续跳过
 
-    @operation_node(name='前往定期采办', is_start_node=True)
+    @operation_node(name='前往饮茶仙', is_start_node=True)
+    def goto_yum_cha_sin(self) -> OperationRoundResult:
+        current_screen_name = self.check_and_update_current_screen(self.last_screenshot, screen_name_list=['随便观-饮茶仙'])
+        if current_screen_name is not None:
+            return self.round_success(status=current_screen_name)
+
+        target_cn_list: list[str] = [
+            '邻里街坊',
+            '饮茶仙',
+        ]
+        ignore_cn_list: list[str] = [
+        ]
+        result = self.round_by_ocr_and_click_by_priority(target_cn_list, ignore_cn_list=ignore_cn_list)
+        if result.is_success:
+            return self.round_wait(status=result.status, wait=1)
+
+        return self.round_retry(status='未识别当前画面', wait=1)
+
+    @node_from(from_name='前往饮茶仙')
+    @operation_node(name='前往定期采办')
     def goto_regular_procurement(self) -> OperationRoundResult:
         """
         点击 定期采买
@@ -76,9 +96,12 @@ class SuibianTempleYumChaSin(ZOperation):
         """
         target_cn_list: list[str] = [
             '确认',
+            '已达上限',
         ]
         result = self.round_by_ocr_and_click_by_priority(target_cn_list)
         if result.is_success:
+            if result.status == '已达上限':
+                return self.round_success(status=result.status)
             return self.round_wait(status=result.status, wait=1)
 
         submit_area = self.ctx.screen_loader.get_area('随便观-饮茶仙', '按钮-定期采办-提交')
@@ -232,10 +255,6 @@ class SuibianTempleYumChaSin(ZOperation):
     @node_from(from_name='前往制作', status='按钮-制造')
     @operation_node(name='点击开始制作')
     def do_craft(self) -> OperationRoundResult:
-        screen = self.check_and_update_current_screen(self.last_screenshot, screen_name_list=['随便观-制造坊'])
-        if screen is None:
-            return self.round_retry(status='未识别当前画面', wait=1)
-
         target_cn_list: list[str] = [
             '所需材料不足',
             '开始制造',
@@ -281,7 +300,7 @@ class SuibianTempleYumChaSin(ZOperation):
     def do_adventure(self) -> OperationRoundResult:
         op = SuibianTempleAdventureDispatch(
             self.ctx,
-            SuibianTempleAdventureDispatchDuration[self.config.squad_duration],  # type: ignore
+            SuibianTempleAdventureDispatchDuration[self.config.adventure_duration],  # type: ignore
         )
         op_result = op.execute()
         if op_result.status == SuibianTempleAdventureDispatch.STATUS_CANT_DISPATCH:
@@ -321,6 +340,7 @@ class SuibianTempleYumChaSin(ZOperation):
 
         return self.round_retry(status='未识别当前画面', wait=1)
 
+    @node_from(from_name='定期采办提交', status='已达上限')
     @node_from(from_name='检查定期采办委托', success=False)
     @operation_node(name='返回随便观')
     def back_to_entry(self) -> OperationRoundResult:
