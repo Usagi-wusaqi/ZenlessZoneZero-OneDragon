@@ -1,5 +1,4 @@
 import time
-from typing import Optional
 
 from one_dragon.base.geometry.point import Point
 from one_dragon.base.geometry.rectangle import Rect
@@ -30,18 +29,36 @@ from zzz_od.operation.zzz_operation import ZOperation
 
 
 class WorldPatrolRunRoute(ZOperation):
+    # 移动速度估值（像素/秒）
+    MOVEMENT_SPEED_ESTIMATE = 50
+    # 到达目标的距离阈值
+    DISTANCE_THRESHOLD_TO_TARGET = 10
+    # 判断是否需要停下转向的角度阈值
+    ANGLE_THRESHOLD_FOR_TURNING = 2.0
+    # 判断是否卡住的距离阈值
+    DISTANCE_THRESHOLD_FOR_STUCK = 10
+    # 判断是否卡住的时间阈值
+    TIME_THRESHOLD_FOR_STUCK = 2.0
+    # 无法获取坐标时，触发脱困的时间阈值
+    TIME_THRESHOLD_FOR_STUCK_NO_POS = 4.0
+    # 无法获取坐标时，停止移动的时间阈值
+    TIME_THRESHOLD_FOR_STOP_NO_POS = 2.0
+    # 无法获取坐标时，判定失败的时间阈值
+    TIME_THRESHOLD_FOR_FAIL_NO_POS = 20.0
+    # 脱困最大尝试次数
+    MAX_UNSTUCK_ATTEMPTS = 6
 
     def __init__(
-            self,
-            ctx: ZContext,
-            route: WorldPatrolRoute,
-            start_idx: int = 0,
+        self,
+        ctx: ZContext,
+        route: WorldPatrolRoute,
+        start_idx: int = 0,
     ):
         """
         运行一条指定的路线
         """
         ZOperation.__init__(self, ctx, op_name=gt('运行路线'))
-        
+
         self.config: WorldPatrolConfig = self.ctx.run_context.get_config(
             app_id=world_patrol_const.APP_ID,
             instance_idx=self.ctx.current_instance_idx,
@@ -49,7 +66,7 @@ class WorldPatrolRunRoute(ZOperation):
         )
 
         self.route: WorldPatrolRoute = route
-        self.current_large_map: WorldPatrolLargeMap = self.ctx.world_patrol_service.get_route_large_map(route)
+        self.current_large_map: WorldPatrolLargeMap | None = self.ctx.world_patrol_service.get_route_large_map(route)
         self.current_idx: int = start_idx
         self.current_pos: Point = Point(0, 0)
 
@@ -58,15 +75,16 @@ class WorldPatrolRunRoute(ZOperation):
         self.no_pos_start_time: float = 0  # 计算坐标失败的开始时间
         self.stuck_pos: Point = self.current_pos  # 被困的坐标
         self.stuck_pos_start_time: float = 0  # 被困坐标的开始时间
-        self.stuck_unstuck_attempts: int = 0  # 连续“有坐标但卡住/无法计算坐标”触发的脱困尝试次数，用于限次（6方向*2轮=12次）
+        self.stuck_unstuck_attempts: int = 0  # 连续“有坐标但卡住/无法计算坐标”触发的脱困尝试次数，用于限次
+        self.restart_due_to_stuck: bool = False  # 标记：当累计脱困尝试达到上限时，要求上层重启当前路线
 
         self.in_battle: bool = False  # 是否在战斗中
         self.last_check_battle_time: float = 0  # 上一次检测是否还在战斗的时间
 
         # 自适应转向算法状态变量
-        self.sensitivity: float = 1.0
-        self.last_angle: Optional[float] = None
-        self.last_angle_diff_command: Optional[float] = None
+        self.sensitivity: float = 1.0  # 转向灵敏度
+        self.last_angle: float | None = None  # 上一次获取到的人物朝向
+        self.last_angle_diff_command: float | None = None  # 上一次下发的转向指令
 
     @operation_node(name='初始回到大世界', is_start_node=True)
     def back_at_first(self) -> OperationRoundResult:
@@ -86,9 +104,13 @@ class WorldPatrolRunRoute(ZOperation):
     @node_from(from_name='传送')
     @operation_node(name='设置起始坐标')
     def set_start_idx(self) -> OperationRoundResult:
-        self.current_pos = self.ctx.world_patrol_service.get_route_pos_before_op_idx(self.route, self.current_idx)
-        if self.current_pos is None:
+        # 根据路线与当前指令下标，计算起点坐标（先用局部变量避免给字段赋 None）
+        start_pos = self.ctx.world_patrol_service.get_route_pos_before_op_idx(self.route, self.current_idx)
+        if start_pos is None:
+            # 起点坐标缺失，视为配置错误
+            log.error('未找到初始坐标，请检查路线配置')
             return self.round_fail(status='路线或开始下标有误')
+        self.current_pos = start_pos
         self.ctx.controller.turn_vertical_by_distance(300)
         return self.round_success(wait=1)
 
@@ -117,112 +139,193 @@ class WorldPatrolRunRoute(ZOperation):
             return self.round_fail(status=f'未知指令类型 {op.op_type}')
 
     def handle_move(
-            self,
-            op: WorldPatrolOperation,
-            mini_map: MiniMapWrapper,
-            is_next_move: bool,
+        self,
+        op: WorldPatrolOperation,
+        mini_map: MiniMapWrapper,
+        is_next_move: bool,
     ) -> OperationRoundResult:
+        """
+        处理移动指令的核心逻辑
+        """
+        # 1. 更新当前位置，并处理卡点/无坐标问题
+        next_pos = self._update_current_pos(mini_map)
+        if next_pos is None:
+            # 若触发了“脱困上限”，将本轮直接判定为失败，以便上层重启本路线
+            if self.restart_due_to_stuck:
+                self.restart_due_to_stuck = False
+                return self.round_fail(status='卡住超限，重启当前路线')
+            # 如果只是暂时无法获取坐标，则返回等待，继续尝试
+            no_pos_seconds = 0 if self.no_pos_start_time == 0 else self.last_screenshot_time - self.no_pos_start_time
+            return self.round_wait(status=f'坐标计算失败 持续 {no_pos_seconds:.2f} 秒')
+
+        self.current_pos = next_pos
+
+        # 2. 执行转向和移动
         target_pos = Point(int(op.data[0]), int(op.data[1]))
+        self._turn_and_move(target_pos, mini_map)
+
+        # 3. 判断是否到达目的地
+        if cal_utils.distance_between(self.current_pos, target_pos) < self.DISTANCE_THRESHOLD_TO_TARGET:
+            self.current_idx += 1
+            if is_next_move:
+                # 到达途径点后，点刹，用于校准
+                self.ctx.controller.stop_moving_forward()
+                time.sleep(0.006)
+                self.ctx.controller.start_moving_forward()
+            else:
+                # 到达终点，或下一个不是移动指令，则停下
+                self.ctx.controller.stop_moving_forward()
+            # 到达目标点后，重置脱困尝试计数
+            if self.stuck_unstuck_attempts > 0:
+                log.info("已到达目标点，重置脱困计数")
+                self.stuck_unstuck_attempts = 0
+            return self.round_wait(status=f'已到达目标点 {target_pos}')
+
+        return self.round_wait(status=f'当前坐标 {self.current_pos} 角度 {mini_map.view_angle} 目标点 {target_pos}',
+                               wait_round_time=0.3,  # 这个时间设置太小的话 会出现转向之后方向判断不准
+                               )
+
+    def _update_current_pos(self, mini_map: MiniMapWrapper) -> Point | None:
+        """
+        更新当前位置，并处理卡点/无坐标的情况
+        :param mini_map: 小地图信息
+        :return: 成功则返回新的坐标点，否则返回 None
+        """
+        if self.current_large_map is None:
+            log.error('缺少大地图数据，无法计算坐标')
+            raise RuntimeError('缺少大地图数据，路线配置错误')
+        # 基于上一次的已知位置，估算本次可能出现的搜索范围矩形
+        # 速度估值：每秒约 50 像素；为了稳妥，搜索范围再加上小地图尺寸
         if self.no_pos_start_time == 0:
             move_seconds = 0
         else:
             move_seconds = self.last_screenshot_time - self.no_pos_start_time
-        move_seconds += 1
-        move_distance = move_seconds * 50  # 随便估的一个跑起来的速度
+        move_seconds += 1  # 给出一个保守的前移估计
+        move_distance = move_seconds * self.MOVEMENT_SPEED_ESTIMATE
         mini_map_d = mini_map.rgb.shape[0]
         possible_rect = Rect(
-            self.current_pos.x - move_distance - mini_map_d,
-            self.current_pos.y - move_distance - mini_map_d,
-            self.current_pos.x + move_distance + mini_map_d,
-            self.current_pos.y + move_distance + mini_map_d,
+            int(self.current_pos.x - move_distance - mini_map_d),
+            int(self.current_pos.y - move_distance - mini_map_d),
+            int(self.current_pos.x + move_distance + mini_map_d),
+            int(self.current_pos.y + move_distance + mini_map_d),
         )
 
+        # 尝试计算当前位置（在估算范围内匹配）
         next_pos = self.ctx.world_patrol_service.cal_pos(
             self.current_large_map,
             mini_map,
-            possible_rect,
+            possible_rect
         )
+
         if next_pos is None:
-            no_pos_seconds = 0 if self.no_pos_start_time == 0 else self.last_screenshot_time - self.no_pos_start_time
+            # 处理无法计算坐标的情况
+            time_since_last_pos = 0 if self.no_pos_start_time == 0 else self.last_screenshot_time - self.no_pos_start_time
             if self.no_pos_start_time == 0:
                 self.no_pos_start_time = self.last_screenshot_time
-            elif no_pos_seconds > 20:
-                return self.round_fail(status='无法计算坐标')
-            elif no_pos_seconds > 4:
-                # 无法计算坐标超过4秒，执行一次脱困；若达到尝试上限则触发当前路线重启
-                if self._get_rid_of_stuck():
-                    return self.round_fail(status='卡住超限，重启当前路线')
-            elif no_pos_seconds > 2:
-                self.ctx.controller.stop_moving_forward()
-
-            self.ctx.controller.turn_vertical_by_distance(300)
-
-            return self.round_wait(status=f'坐标计算失败 持续 {no_pos_seconds:.2f} 秒')
+            else:
+                if time_since_last_pos > self.TIME_THRESHOLD_FOR_FAIL_NO_POS:
+                    log.error('长时间无法计算坐标，任务失败')
+                    return None  # 触发上层逻辑失败
+                if time_since_last_pos > self.TIME_THRESHOLD_FOR_STUCK_NO_POS and self._get_rid_of_stuck():
+                    # 达到脱困上限：标记并让上层在本轮处理失败
+                    self.restart_due_to_stuck = True
+                    log.error('脱困次数超限，重启路线')
+                    return None  # 触发上层逻辑失败
+                if time_since_last_pos > self.TIME_THRESHOLD_FOR_STOP_NO_POS:
+                    self.ctx.controller.stop_moving_forward()
+            # 刚开始无法获取坐标，轻微上抬视角，并提前返回
+            if self.no_pos_start_time == self.last_screenshot_time:
+                self.ctx.controller.turn_vertical_by_distance(300)
+            return None
         else:
-            self.no_pos_start_time = 0
+            self.no_pos_start_time = 0  # 成功获取坐标，重置计时器
 
-        if cal_utils.distance_between(next_pos, self.stuck_pos) < 10:
+        # 处理有坐标但卡住的情况
+        if self._process_stuck_with_pos(next_pos):
+            # 达到脱困上限：标记并让上层在本轮处理失败
+            self.restart_due_to_stuck = True
+            return None
+
+        return next_pos
+
+    def _process_stuck_with_pos(self, next_pos: Point) -> bool:
+        """
+        有坐标但疑似卡住时的处理。
+        Returns:
+            bool: True 表示达到脱困上限，需要上层重启当前路线；False 表示已处理或无需处理。
+        """
+        if cal_utils.distance_between(next_pos, self.stuck_pos) < self.DISTANCE_THRESHOLD_FOR_STUCK:
             if self.stuck_pos_start_time == 0:
                 self.stuck_pos_start_time = self.last_screenshot_time
-            elif self.last_screenshot_time - self.stuck_pos_start_time > 2:
+            elif self.last_screenshot_time - self.stuck_pos_start_time > self.TIME_THRESHOLD_FOR_STUCK:
                 self.ctx.controller.stop_moving_forward()
-                # 有坐标但卡住：执行一次脱困；若达到尝试上限则触发当前路线重启
                 if self._get_rid_of_stuck():
-                    self.stuck_pos = Point(0, 0)  # 尝试脱困后 重置脱困坐标
-                    self.stuck_pos_start_time = 0
-                    return self.round_fail(status='卡住超限，重启当前路线')
+                    # 达到脱困上限：标记由上层进行重启
+                    self.restart_due_to_stuck = True
+                    log.error('脱困次数超限，重启路线')
+                    return True
+                # 成功执行一次脱困后，重置卡点计时，避免连续触发
+                self.stuck_pos = Point(0, 0)
+                self.stuck_pos_start_time = 0
         else:
             self.stuck_pos = next_pos
             self.stuck_pos_start_time = 0
+        return False
 
+    def _turn_and_move(self, target_pos: Point, mini_map: MiniMapWrapper):
+        """
+        根据目标点执行转向和移动
+        """
         current_angle = mini_map.view_angle
-        self.current_pos = next_pos
-        if mini_map.view_angle is not None:
-            target_angle = cal_utils.calculate_direction_angle(self.current_pos, target_pos)
-            angle_diff = cal_utils.angle_delta(current_angle, target_angle)
-            
-            # --- 自适应转向算法开始 ---
-            # 1. 校准灵敏度 (仅在有历史数据时)
-            if self.last_angle is not None and self.last_angle_diff_command is not None:
-                # 计算实际转动量
-                actual_angle_change = cal_utils.angle_delta(self.last_angle, current_angle)
-                
-                # 防止除零错误
-                if abs(self.last_angle_diff_command) > 1e-6:
-                    # 计算理论灵敏度
-                    theoretical_sensitivity = actual_angle_change / self.last_angle_diff_command
-                    
-                    # 步长限制调整
-                    sensitivity_change = theoretical_sensitivity - self.sensitivity
-                    clipped_change = max(-0.02, min(sensitivity_change, 0.02))
-                    self.sensitivity += clipped_change
-                    
-                    # 可选：打印调试信息
-                    # log.debug(f"校准: 理论灵敏度={theoretical_sensitivity:.4f}, 新灵敏度={self.sensitivity:.4f}")
-            
-            # 2. 计算并执行本次指令
-            calibrated_angle_diff = angle_diff * self.sensitivity
+        if current_angle is None:
+            # 重置自适应状态，避免使用过时数据
+            self.last_angle = None
+            self.last_angle_diff_command = None
+            self.ctx.controller.start_moving_forward()  # 没有角度信息时，先往前走
+            return
+
+        target_angle = cal_utils.calculate_direction_angle(self.current_pos, target_pos)
+        angle_diff = cal_utils.angle_delta(current_angle, target_angle)
+
+        # --- 自适应转向算法 ---
+        # 1. 校准灵敏度: 通过对比上一次的指令和实际的视角变化，动态微调灵敏度
+        if self.last_angle is not None and self.last_angle_diff_command is not None:
+            # 计算实际上视角变化了多少度
+            actual_angle_change = cal_utils.angle_delta(self.last_angle, current_angle)
+            # 防止除零错误
+            if abs(self.last_angle_diff_command) > 1e-6:
+                # 根据“实际变化/指令变化”计算出理论上最匹配的灵敏度
+                theoretical_sensitivity = actual_angle_change / self.last_angle_diff_command
+                # 计算理论灵敏度与当前灵敏度的差距
+                sensitivity_change = theoretical_sensitivity - self.sensitivity
+                # 限制单次调整幅度，防止突变，让校准过程更平滑
+                clipped_change = max(-0.02, min(sensitivity_change, 0.02))
+                self.sensitivity += clipped_change
+                # 限制灵敏度在合理范围内，防止累积偏离
+                self.sensitivity = max(0.5, min(self.sensitivity, 2.0))
+                # 可选：打印调试信息
+                # log.debug(f"校准: 理论灵敏度={theoretical_sensitivity:.4f}, 新灵敏度={self.sensitivity:.4f}")
+
+        # 2. 计算并执行转向
+        calibrated_angle_diff = angle_diff * self.sensitivity
+        need_turn = abs(angle_diff) > self.ANGLE_THRESHOLD_FOR_TURNING
+
+        if need_turn:
+            # 角度偏差大，点刹，再转向
+            self.ctx.controller.stop_moving_forward()
+            # 执行转向
             self.ctx.controller.turn_by_angle_diff(calibrated_angle_diff)
-            
-            # 3. 记录历史数据
-            self.last_angle = current_angle
-            self.last_angle_diff_command = calibrated_angle_diff
-            # --- 自适应转向算法结束 ---
+        else:
+            # 角度偏差小，直接在移动中微调
+            self.ctx.controller.turn_by_angle_diff(calibrated_angle_diff)
 
+        # 3. 记录本次数据
+        self.last_angle = current_angle
+        self.last_angle_diff_command = calibrated_angle_diff
+        # --- 算法结束 ---
+
+        # 4. 开始移动
         self.ctx.controller.start_moving_forward()
-
-        if cal_utils.distance_between(self.current_pos, target_pos) < 10:
-            self.current_idx += 1
-            if not is_next_move:
-                self.ctx.controller.stop_moving_forward()
-            # 到达目标点后，重置脱困尝试计数
-            if self.stuck_unstuck_attempts:
-                self.stuck_unstuck_attempts = 0
-            return self.round_wait(status=f'已到达目标点 {target_pos}')
-
-        return self.round_wait(status=f'当前坐标 {self.current_pos} 角度 {current_angle} 目标点 {target_pos}',
-                               wait_round_time=0.3,  # 这个时间设置太小的话 会出现转向之后方向判断不准
-                               )
 
     def _get_rid_of_stuck(self) -> bool:
         """
@@ -232,10 +335,11 @@ class WorldPatrolRunRoute(ZOperation):
         """
         # 积累脱困尝试次数（无论来源于“有坐标但卡住”还是“无法计算坐标”）
         self.stuck_unstuck_attempts += 1
-        if self.stuck_unstuck_attempts >= 12:
-            log.info('脱困已尝试 12 次，停止 3 秒后重启当前路线')
-            time.sleep(3)
+        if self.stuck_unstuck_attempts >= self.MAX_UNSTUCK_ATTEMPTS:
+            log.info(f'脱困已尝试 {self.MAX_UNSTUCK_ATTEMPTS} 次，重启当前路线')
             self.stuck_unstuck_attempts = 0
+            # 达到上限时，标记以便上层判定失败并重启
+            self.restart_due_to_stuck = True
             return True
 
         if self.ctx.auto_op is not None:
@@ -281,19 +385,19 @@ class WorldPatrolRunRoute(ZOperation):
     @node_from(from_name='初始化自动战斗')
     @operation_node(name='自动战斗')
     def auto_battle(self) -> OperationRoundResult:
-        if self.ctx.auto_op.auto_battle_context.last_check_end_result is not None:
+        if self.ctx.auto_op is not None and self.ctx.auto_op.auto_battle_context.last_check_end_result is not None:
             self.ctx.stop_auto_battle()
             return self.round_success(status=self.ctx.auto_op.auto_battle_context.last_check_end_result)
 
-        self.ctx.auto_op.auto_battle_context.check_battle_state(
-            self.last_screenshot, self.last_screenshot_time,
-            check_battle_end_normal_result=True)
+        if self.ctx.auto_op is not None:
+            self.ctx.auto_op.auto_battle_context.check_battle_state(
+                self.last_screenshot, self.last_screenshot_time,
+                check_battle_end_normal_result=True)
 
-        if self.ctx.auto_op.auto_battle_context.last_check_in_battle:
-            if self.last_screenshot_time - self.last_check_battle_time > 1:
-                mini_map = self.ctx.world_patrol_service.cut_mini_map(self.last_screenshot)
-                if mini_map.play_mask_found:
-                    return self.round_success(status='发现地图')
+        if self.ctx.auto_op is not None and self.ctx.auto_op.auto_battle_context.last_check_in_battle and self.last_screenshot_time - self.last_check_battle_time > 1:
+            mini_map = self.ctx.world_patrol_service.cut_mini_map(self.last_screenshot)
+            if mini_map.play_mask_found:
+                return self.round_success(status='发现地图')
 
         return self.round_wait(wait=self.ctx.battle_assistant_config.screenshot_interval)
 
@@ -324,7 +428,7 @@ class WorldPatrolRunRoute(ZOperation):
 def __debug(area_full_id: str, route_idx: int):
     ctx = ZContext()
     ctx.init_ocr()
-    ctx.init_by_config()
+    ctx.init_for_application()
     ctx.world_patrol_service.load_data()
 
     target_route: WorldPatrolRoute | None = None
