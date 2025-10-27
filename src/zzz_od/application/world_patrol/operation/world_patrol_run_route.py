@@ -76,7 +76,7 @@ class WorldPatrolRunRoute(ZOperation):
         self.stuck_pos: Point = self.current_pos  # 被困的坐标
         self.stuck_pos_start_time: float = 0  # 被困坐标的开始时间
         self.stuck_unstuck_attempts: int = 0  # 连续“有坐标但卡住/无法计算坐标”触发的脱困尝试次数，用于限次
-        self.restart_due_to_stuck: bool = False  # 标记：当累计脱困尝试达到上限时，要求上层重启当前路线
+        self.restart_due_to_stuck: bool = False  # 达到脱困尝试上限后，请求上层重启当前路线
 
         self.in_battle: bool = False  # 是否在战斗中
         self.last_check_battle_time: float = 0  # 上一次检测是否还在战斗的时间
@@ -147,18 +147,21 @@ class WorldPatrolRunRoute(ZOperation):
         """
         处理移动指令的核心逻辑
         """
-        # 1. 更新当前位置，并处理卡点/无坐标问题
+        # 1. 更新当前位置，并处理无法计算坐标的情况
         next_pos = self._update_current_pos(mini_map)
         if next_pos is None:
-            # 若触发了“脱困上限”，将本轮直接判定为失败，以便上层重启本路线
+            elapsed = 0 if self.no_pos_start_time == 0 else self.last_screenshot_time - self.no_pos_start_time
             if self.restart_due_to_stuck:
                 self.restart_due_to_stuck = False
                 return self.round_fail(status='卡住超限，重启当前路线')
-            # 如果只是暂时无法获取坐标，则返回等待，继续尝试
-            no_pos_seconds = 0 if self.no_pos_start_time == 0 else self.last_screenshot_time - self.no_pos_start_time
-            return self.round_wait(status=f'坐标计算失败 持续 {no_pos_seconds:.2f} 秒')
+            return self.round_wait(status=f'坐标计算失败 持续 {elapsed:.2f} 秒')
 
         self.current_pos = next_pos
+
+        # 处理有坐标但卡住的情况
+        if self._process_stuck_with_pos(self.current_pos):
+            self.restart_due_to_stuck = False
+            return self.round_fail(status='卡住超限，重启当前路线')
 
         # 2. 执行转向和移动
         target_pos = Point(int(op.data[0]), int(op.data[1]))
@@ -172,36 +175,31 @@ class WorldPatrolRunRoute(ZOperation):
                 self.ctx.controller.stop_moving_forward()
                 time.sleep(0.006)
                 self.ctx.controller.start_moving_forward()
-            else:
-                # 到达终点，或下一个不是移动指令，则停下
-                self.ctx.controller.stop_moving_forward()
-            # 到达目标点后，重置脱困尝试计数
             if self.stuck_unstuck_attempts > 0:
-                log.info("已到达目标点，重置脱困计数")
+                log.info('已到达目标点，重置脱困计数')
                 self.stuck_unstuck_attempts = 0
             return self.round_wait(status=f'已到达目标点 {target_pos}')
 
         return self.round_wait(status=f'当前坐标 {self.current_pos} 角度 {mini_map.view_angle} 目标点 {target_pos}',
-                               wait_round_time=0.3,  # 这个时间设置太小的话 会出现转向之后方向判断不准
-                               )
+                       wait_round_time=0.3,  # 这个时间设置太小的话，会出现转向之后方向判断不准
+                       )
 
     def _update_current_pos(self, mini_map: MiniMapWrapper) -> Point | None:
         """
-        更新当前位置，并处理卡点/无坐标的情况
+        更新当前位置，并处理无法计算坐标的情况
         :param mini_map: 小地图信息
         :return: 成功则返回新的坐标点，否则返回 None
         """
         if self.current_large_map is None:
             log.error('缺少大地图数据，无法计算坐标')
             raise RuntimeError('缺少大地图数据，路线配置错误')
-        # 基于上一次的已知位置，估算本次可能出现的搜索范围矩形
-        # 速度估值：每秒约 50 像素；为了稳妥，搜索范围再加上小地图尺寸
+        # 基于上一次的已知位置，估算本次可能出现的搜索范围矩形，搜索范围再加上小地图尺寸
         if self.no_pos_start_time == 0:
             move_seconds = 0
         else:
             move_seconds = self.last_screenshot_time - self.no_pos_start_time
         move_seconds += 1  # 给出一个保守的前移估计
-        move_distance = move_seconds * self.MOVEMENT_SPEED_ESTIMATE
+        move_distance = move_seconds * self.MOVEMENT_SPEED_ESTIMATE  # 速度估值
         mini_map_d = mini_map.rgb.shape[0]
         possible_rect = Rect(
             int(self.current_pos.x - move_distance - mini_map_d),
@@ -223,14 +221,17 @@ class WorldPatrolRunRoute(ZOperation):
             if self.no_pos_start_time == 0:
                 self.no_pos_start_time = self.last_screenshot_time
             else:
+                # 1) 超时失败（请求重启）
                 if time_since_last_pos > self.TIME_THRESHOLD_FOR_FAIL_NO_POS:
-                    log.error('长时间无法计算坐标，任务失败')
-                    return None  # 触发上层逻辑失败
-                if time_since_last_pos > self.TIME_THRESHOLD_FOR_STUCK_NO_POS and self._get_rid_of_stuck():
-                    # 达到脱困上限：标记并让上层在本轮处理失败
+                    log.error('长时间无法计算坐标，任务失败，重启当前路线')
                     self.restart_due_to_stuck = True
-                    log.error('脱困次数超限，重启路线')
-                    return None  # 触发上层逻辑失败
+                    self.stuck_unstuck_attempts = 0
+                    return None
+                # 2) 达到脱困阈值（尝试一次脱困；若达到上限，内部已标记重启）
+                if time_since_last_pos > self.TIME_THRESHOLD_FOR_STUCK_NO_POS:
+                    self._get_rid_of_stuck()
+                    return None
+                # 3) 达到停止阈值（停止前进，避免盲走）
                 if time_since_last_pos > self.TIME_THRESHOLD_FOR_STOP_NO_POS:
                     self.ctx.controller.stop_moving_forward()
             # 刚开始无法获取坐标，轻微上抬视角，并提前返回
@@ -240,17 +241,11 @@ class WorldPatrolRunRoute(ZOperation):
         else:
             self.no_pos_start_time = 0  # 成功获取坐标，重置计时器
 
-        # 处理有坐标但卡住的情况
-        if self._process_stuck_with_pos(next_pos):
-            # 达到脱困上限：标记并让上层在本轮处理失败
-            self.restart_due_to_stuck = True
-            return None
-
         return next_pos
 
     def _process_stuck_with_pos(self, next_pos: Point) -> bool:
         """
-        有坐标但疑似卡住时的处理。
+        处理有坐标但卡住的情况
         Returns:
             bool: True 表示达到脱困上限，需要上层重启当前路线；False 表示已处理或无需处理。
         """
@@ -260,9 +255,6 @@ class WorldPatrolRunRoute(ZOperation):
             elif self.last_screenshot_time - self.stuck_pos_start_time > self.TIME_THRESHOLD_FOR_STUCK:
                 self.ctx.controller.stop_moving_forward()
                 if self._get_rid_of_stuck():
-                    # 达到脱困上限：标记由上层进行重启
-                    self.restart_due_to_stuck = True
-                    log.error('脱困次数超限，重启路线')
                     return True
                 # 成功执行一次脱困后，重置卡点计时，避免连续触发
                 self.stuck_pos = Point(0, 0)
@@ -385,7 +377,10 @@ class WorldPatrolRunRoute(ZOperation):
     @node_from(from_name='初始化自动战斗')
     @operation_node(name='自动战斗')
     def auto_battle(self) -> OperationRoundResult:
-        if self.ctx.auto_op is not None and self.ctx.auto_op.auto_battle_context.last_check_end_result is not None:
+        if self.ctx.auto_op is None:
+            return self.round_wait(wait=self.ctx.battle_assistant_config.screenshot_interval)
+
+        if self.ctx.auto_op.auto_battle_context.last_check_end_result is not None:
             self.ctx.stop_auto_battle()
             return self.round_success(status=self.ctx.auto_op.auto_battle_context.last_check_end_result)
 
