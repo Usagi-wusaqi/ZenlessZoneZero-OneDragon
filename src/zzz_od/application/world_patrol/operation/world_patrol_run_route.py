@@ -203,19 +203,18 @@ class WorldPatrolRunRoute(ZOperation):
             time_since_last_pos = 0 if self.no_pos_start_time == 0 else self.last_screenshot_time - self.no_pos_start_time
             if self.no_pos_start_time == 0:
                 self.no_pos_start_time = self.last_screenshot_time
-            else:
-                # 1) 超时失败（请求重启）
-                if time_since_last_pos > 20.0:  # 无法获取坐标判定失败阈值
-                    log.error('长时间无法计算坐标，任务失败，重启当前路线')
+                # 1) 达到重启阈值（请求重启）
+            elif time_since_last_pos > 20.0:
+                    log.error('长时间无法计算坐标，重启当前路线')
                     self.restart_due_to_stuck = True
                     self.stuck_unstuck_attempts = 0
                     return None
-                # 2) 达到脱困阈值（尝试一次脱困；若达到上限，内部已标记重启）
-                if time_since_last_pos > 4.0:  # 无法获取坐标触发脱困阈值
+                # 2) 达到脱困阈值（尝试脱困）
+            elif time_since_last_pos > 4.0:
                     self._get_rid_of_stuck()
                     return None
                 # 3) 达到停止阈值（停止前进，避免盲走）
-                if time_since_last_pos > 2.0:  # 无法获取坐标停止前进阈值
+            elif time_since_last_pos > 2.0:
                     self.ctx.controller.stop_moving_forward()
             # 刚开始无法获取坐标，轻微上抬视角，并提前返回
             if self.no_pos_start_time == self.last_screenshot_time:
