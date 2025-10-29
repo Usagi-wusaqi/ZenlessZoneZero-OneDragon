@@ -229,7 +229,7 @@ class WorldPatrolRunRoute(ZOperation):
         if cal_utils.distance_between(next_pos, self.stuck_pos) < 10:
             if self.stuck_pos_start_time == 0:
                 self.stuck_pos_start_time = self.last_screenshot_time
-            elif self.last_screenshot_time - self.stuck_pos_start_time > 2.0:  # 卡住时间阈值
+            elif self.last_screenshot_time - self.stuck_pos_start_time >  4.0:  # 卡住时间阈值（如果代理人当时走得慢或未完成转向，小于 2 偶尔会误判）
                 self.ctx.controller.stop_moving_forward()
                 # 有坐标脱困：计数并在达到上限时重启，否则执行一次脱困动作
                 self.pos_stuck_attempts += 1
