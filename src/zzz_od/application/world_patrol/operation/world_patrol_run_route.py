@@ -29,24 +29,6 @@ from zzz_od.operation.zzz_operation import ZOperation
 
 
 class WorldPatrolRunRoute(ZOperation):
-    # 移动速度估值（像素/秒）
-    MOVEMENT_SPEED_ESTIMATE = 50
-    # 到达目标的距离阈值
-    DISTANCE_THRESHOLD_TO_TARGET = 10
-    # 判断是否需要停下转向的角度阈值
-    ANGLE_THRESHOLD_FOR_TURNING = 2.0
-    # 判断是否卡住的距离阈值
-    DISTANCE_THRESHOLD_FOR_STUCK = 10
-    # 判断是否卡住的时间阈值
-    TIME_THRESHOLD_FOR_STUCK = 2.0
-    # 无法获取坐标时，触发脱困的时间阈值
-    TIME_THRESHOLD_FOR_STUCK_NO_POS = 4.0
-    # 无法获取坐标时，停止移动的时间阈值
-    TIME_THRESHOLD_FOR_STOP_NO_POS = 2.0
-    # 无法获取坐标时，判定失败的时间阈值
-    TIME_THRESHOLD_FOR_FAIL_NO_POS = 20.0
-    # 脱困最大尝试次数
-    MAX_UNSTUCK_ATTEMPTS = 6
 
     def __init__(
         self,
@@ -168,7 +150,8 @@ class WorldPatrolRunRoute(ZOperation):
         self._turn_and_move(target_pos, mini_map)
 
         # 3. 判断是否到达目的地
-        if cal_utils.distance_between(self.current_pos, target_pos) < self.DISTANCE_THRESHOLD_TO_TARGET:
+        # 到达目标的距离阈值
+        if cal_utils.distance_between(self.current_pos, target_pos) < 10:
             self.current_idx += 1
             if is_next_move:
                 # 到达途径点后，点刹，用于校准
@@ -199,7 +182,7 @@ class WorldPatrolRunRoute(ZOperation):
         else:
             move_seconds = self.last_screenshot_time - self.no_pos_start_time
         move_seconds += 1  # 给出一个保守的前移估计
-        move_distance = move_seconds * self.MOVEMENT_SPEED_ESTIMATE  # 速度估值
+        move_distance = move_seconds * 50  # 移动速度估值
         mini_map_d = mini_map.rgb.shape[0]
         possible_rect = Rect(
             int(self.current_pos.x - move_distance - mini_map_d),
@@ -222,17 +205,17 @@ class WorldPatrolRunRoute(ZOperation):
                 self.no_pos_start_time = self.last_screenshot_time
             else:
                 # 1) 超时失败（请求重启）
-                if time_since_last_pos > self.TIME_THRESHOLD_FOR_FAIL_NO_POS:
+                if time_since_last_pos > 20.0:  # 无法获取坐标判定失败阈值
                     log.error('长时间无法计算坐标，任务失败，重启当前路线')
                     self.restart_due_to_stuck = True
                     self.stuck_unstuck_attempts = 0
                     return None
                 # 2) 达到脱困阈值（尝试一次脱困；若达到上限，内部已标记重启）
-                if time_since_last_pos > self.TIME_THRESHOLD_FOR_STUCK_NO_POS:
+                if time_since_last_pos > 4.0:  # 无法获取坐标触发脱困阈值
                     self._get_rid_of_stuck()
                     return None
                 # 3) 达到停止阈值（停止前进，避免盲走）
-                if time_since_last_pos > self.TIME_THRESHOLD_FOR_STOP_NO_POS:
+                if time_since_last_pos > 2.0:  # 无法获取坐标停止前进阈值
                     self.ctx.controller.stop_moving_forward()
             # 刚开始无法获取坐标，轻微上抬视角，并提前返回
             if self.no_pos_start_time == self.last_screenshot_time:
@@ -249,10 +232,11 @@ class WorldPatrolRunRoute(ZOperation):
         Returns:
             bool: True 表示达到脱困上限，需要上层重启当前路线；False 表示已处理或无需处理。
         """
-        if cal_utils.distance_between(next_pos, self.stuck_pos) < self.DISTANCE_THRESHOLD_FOR_STUCK:
+        # 判断“有坐标但卡住”的距离阈值
+        if cal_utils.distance_between(next_pos, self.stuck_pos) < 10:
             if self.stuck_pos_start_time == 0:
                 self.stuck_pos_start_time = self.last_screenshot_time
-            elif self.last_screenshot_time - self.stuck_pos_start_time > self.TIME_THRESHOLD_FOR_STUCK:
+            elif self.last_screenshot_time - self.stuck_pos_start_time > 2.0:  # 卡住时间阈值
                 self.ctx.controller.stop_moving_forward()
                 if self._get_rid_of_stuck():
                     return True
@@ -300,7 +284,8 @@ class WorldPatrolRunRoute(ZOperation):
 
         # 2. 计算并执行转向
         calibrated_angle_diff = angle_diff * self.sensitivity
-        need_turn = abs(angle_diff) > self.ANGLE_THRESHOLD_FOR_TURNING
+        # 判断是否需要停下转向的角度阈值
+        need_turn = abs(angle_diff) > 2.0
 
         if need_turn:
             # 角度偏差大，点刹，再转向
@@ -327,8 +312,8 @@ class WorldPatrolRunRoute(ZOperation):
         """
         # 积累脱困尝试次数（无论来源于“有坐标但卡住”还是“无法计算坐标”）
         self.stuck_unstuck_attempts += 1
-        if self.stuck_unstuck_attempts >= self.MAX_UNSTUCK_ATTEMPTS:
-            log.info(f'脱困已尝试 {self.MAX_UNSTUCK_ATTEMPTS} 次，重启当前路线')
+        if self.stuck_unstuck_attempts >= 6:  # 脱困最大尝试次数
+            log.info('多次有坐标但卡住，重启当前路线')
             self.stuck_unstuck_attempts = 0
             # 达到上限时，标记以便上层判定失败并重启
             self.restart_due_to_stuck = True
