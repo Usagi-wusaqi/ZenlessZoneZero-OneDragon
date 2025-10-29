@@ -384,12 +384,11 @@ class WorldPatrolRunRoute(ZOperation):
             self.ctx.stop_auto_battle()
             return self.round_success(status=self.ctx.auto_op.auto_battle_context.last_check_end_result)
 
-        if self.ctx.auto_op is not None:
-            self.ctx.auto_op.auto_battle_context.check_battle_state(
-                self.last_screenshot, self.last_screenshot_time,
-                check_battle_end_normal_result=True)
+        self.ctx.auto_op.auto_battle_context.check_battle_state(
+            self.last_screenshot, self.last_screenshot_time,
+            check_battle_end_normal_result=True)
 
-        if self.ctx.auto_op is not None and self.ctx.auto_op.auto_battle_context.last_check_in_battle and self.last_screenshot_time - self.last_check_battle_time > 1:
+        if self.ctx.auto_op.auto_battle_context.last_check_in_battle and self.last_screenshot_time - self.last_check_battle_time > 1:
             mini_map = self.ctx.world_patrol_service.cut_mini_map(self.last_screenshot)
             if mini_map.play_mask_found:
                 return self.round_success(status='发现地图')
