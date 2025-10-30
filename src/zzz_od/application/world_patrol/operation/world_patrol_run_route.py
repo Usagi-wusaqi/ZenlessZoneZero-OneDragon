@@ -362,6 +362,8 @@ class WorldPatrolRunRoute(ZOperation):
 
         if self.ctx.auto_op.auto_battle_context.last_check_in_battle and self.last_screenshot_time - self.last_check_battle_time > 1:
             mini_map = self.ctx.world_patrol_service.cut_mini_map(self.last_screenshot)
+            # 更新节流时间戳，避免每轮重复切小地图
+            self.last_check_battle_time = self.last_screenshot_time
             if mini_map.play_mask_found:
                 return self.round_success(status='发现地图')
 
