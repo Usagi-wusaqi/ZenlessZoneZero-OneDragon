@@ -308,7 +308,8 @@ class WorldPatrolRunRoute(ZOperation):
         tag: 日志标记（如 'with-pos' 或 'no-pos'）
         """
         if self.ctx.auto_op is not None:
-            auto_battle_utils.switch_to_best_agent_for_moving(self.ctx.auto_op)  # 移动前切换到最佳角色
+            # 脱困前，切换到下一位（利用不同角色体型/站位尝试摆脱卡点）
+            self.ctx.auto_op.auto_battle_context.switch_next()
         log.info(f'[{tag}] 本次脱困方向 {self.stuck_move_direction}')
         if self.stuck_move_direction == 0:  # 向左走
             self.ctx.controller.move_a(press=True, press_time=1, release=True)
@@ -375,6 +376,9 @@ class WorldPatrolRunRoute(ZOperation):
         self.in_battle = False
         self.ctx.stop_auto_battle()
         time.sleep(5)  # 等待一会 自动战斗停止需要松开按键
+        # 战斗后，切换到最佳行走位
+        if self.ctx.auto_op is not None:
+            auto_battle_utils.switch_to_best_agent_for_moving(self.ctx.auto_op)
         self.ctx.controller.turn_vertical_by_distance(300)
         return self.round_success()
 
