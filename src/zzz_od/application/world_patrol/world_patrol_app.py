@@ -125,10 +125,13 @@ class WorldPatrolApp(ZApplication):
             route_finished = True
         elif _is_stuck_over_limit_status(result.status):
             # 二次尝试（从头）
-            retry_op = WorldPatrolRunRoute(self.ctx, route)
+            retry_op = WorldPatrolRunRoute(self.ctx, route, is_restarted=True)
             retry_result = retry_op.execute()
-            if retry_result.success or _is_stuck_over_limit_status(retry_result.status):
+            if retry_result.success:
                 route_finished = True
+            elif _is_stuck_over_limit_status(retry_result.status):
+                route_finished = False
+                fail_status = '重启后再次卡住'
             else:
                 fail_status = retry_result.status
         else:
@@ -145,7 +148,7 @@ class WorldPatrolApp(ZApplication):
 
 def __debug():
     ctx = ZContext()
-    ctx.init_by_config()
+    ctx.init()
 
     app = WorldPatrolApp(ctx)
     app.execute()

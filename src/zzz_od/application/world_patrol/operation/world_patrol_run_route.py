@@ -36,6 +36,7 @@ class WorldPatrolRunRoute(ZOperation):
         ctx: ZContext,
         route: WorldPatrolRoute,
         start_idx: int = 0,
+        is_restarted: bool = False,
     ):
         """
         运行一条指定的路线
@@ -49,6 +50,7 @@ class WorldPatrolRunRoute(ZOperation):
         )
 
         self.route: WorldPatrolRoute = route
+        self.is_restarted: bool = is_restarted  # 是否为重启的路线
         self.current_large_map: WorldPatrolLargeMap | None = self.ctx.world_patrol_service.get_route_large_map(route)
         self.current_idx: int = start_idx
         self.current_pos: Point = Point(0, 0)
@@ -227,6 +229,10 @@ class WorldPatrolRunRoute(ZOperation):
                 return None
             # 达到脱困阈值：执行脱困（不计数）
             elif no_pos_seconds > 4.0:
+                # 如果是重启后的路线，再次卡住时直接跳过，不再尝试脱困
+                if self.is_restarted:
+                    log.error('[no-pos]再次卡住，跳过当前路线')
+                    return None
                 self._do_unstuck_move('no-pos')
             # 达到停止阈值：停止前进，避免盲走
             elif no_pos_seconds > 2.0:
@@ -251,6 +257,10 @@ class WorldPatrolRunRoute(ZOperation):
                 self.stuck_pos_start_time = self.last_screenshot_time
             elif self.last_screenshot_time - self.stuck_pos_start_time > 2:
                 self.ctx.controller.stop_moving_forward()
+                # 如果是重启后的路线，再次卡住时直接跳过
+                if self.is_restarted:
+                    log.error('[with-pos]再次卡住，跳过当前路线')
+                    return True
                 # 先尝试智能回溯
                 status = self._backtrack_step(next_pos, emit_log=True)
                 if status in ('unavailable', 'expired'):
