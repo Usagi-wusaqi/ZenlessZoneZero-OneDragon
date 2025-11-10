@@ -1,13 +1,20 @@
-from typing import Optional
-
 from one_dragon.base.config.yaml_config import YamlConfig
 
 
-class BasicNotifyConfig(YamlConfig):
+class NotifyConfig(YamlConfig):
 
-    def __init__(self, instance_idx: Optional[int] = None):
+    def __init__(self, instance_idx: int, app_map: dict[str, str]):
         YamlConfig.__init__(self, 'notify', instance_idx=instance_idx)
+        self.app_map = app_map.copy()
         self._generate_dynamic_properties()
+
+    @property
+    def notify_title(self) -> str:
+        return self.get('notify_title', '绝区零 一条龙 运行通知')
+
+    @notify_title.setter
+    def notify_title(self, new_value: str) -> None:
+        self.update('notify_title', new_value)
 
     @property
     def enable_notify(self) -> bool:
@@ -26,7 +33,7 @@ class BasicNotifyConfig(YamlConfig):
         self.update('enable_before_notify', new_value)
 
     def _generate_dynamic_properties(self):
-        for app in self.app_list.items():
+        for app in self.app_map.items():
             prop_name = app[0]
             def create_getter(name: str):
                 def getter(self) -> bool:
@@ -43,4 +50,4 @@ class BasicNotifyConfig(YamlConfig):
                 create_getter(prop_name),
                 create_setter(prop_name)
             )
-            setattr(BasicNotifyConfig, prop_name, prop)
+            setattr(NotifyConfig, prop_name, prop)

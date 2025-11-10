@@ -19,6 +19,7 @@ from one_dragon.base.operation.application.application_run_context import (
 from one_dragon.base.operation.operation_base import OperationBase, OperationResult
 from one_dragon.base.operation.operation_edge import OperationEdge, OperationEdgeDesc
 from one_dragon.base.operation.operation_node import OperationNode
+from one_dragon.base.operation.operation_notify import process_node_notifications
 from one_dragon.base.operation.operation_round_result import (
     OperationRoundResult,
     OperationRoundResultEnum,
@@ -499,9 +500,19 @@ class Operation(OperationBase):
         self.node_max_retry_times = self._current_node.node_max_retry_times
 
         if self._current_node.op_method is not None:
+            # 先截图，确保通知时有最新的截图可用
             if self._current_node.screenshot_before_round:
                 self.screenshot()
+
+            # before 阶段通知
+            process_node_notifications(self, 'before')
+
+            # 执行节点方法
             current_round_result: OperationRoundResult = self._current_node.op_method(self)
+
+            # after 阶段通知
+            process_node_notifications(self, 'after', round_result=current_round_result)
+
         elif self._current_node.op is not None:
             op_result = self._current_node.op.execute()
             current_round_result = self.round_by_op_result(op_result,
@@ -655,6 +666,14 @@ class Operation(OperationBase):
             str: 格式化的显示名称。
         """
         return '指令[ %s ]' % self.op_name
+
+    def get_current_node(self) -> Optional[OperationNode]:
+        """获取当前执行的节点。
+
+        Returns:
+            Optional[OperationNode]: 当前节点，如果没有则为None。
+        """
+        return self._current_node
 
     def after_operation_done(self, result: OperationResult):
         """处理操作完成后的处理。
