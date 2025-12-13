@@ -1,0 +1,4 @@
+# file: C:\Auto\ZZZ-OD\src\one_dragon\base\operation\operation_round_result.py
+# hypothesis_version: 6.148.7
+
+['失败', '成功', '未知', '等待', '重试']

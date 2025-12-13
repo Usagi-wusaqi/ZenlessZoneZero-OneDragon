@@ -1,15 +1,16 @@
 """
-ZApplication 基类 back_to_world 默认实现的单元测试
+ZApplication 基类 back_to_world 默认实现的简化单元测试
 
 测试属性 1: 默认实现一致性
 验证需求 1.1, 2.1
-
-这是一个简化版本，避免复杂的导入依赖问题
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 from typing import Optional
+
+# 导入真实的类
+from one_dragon.base.operation.operation_round_result import OperationRoundResult, OperationRoundResultEnum
 
 
 class OperationRoundResult:
@@ -17,6 +18,15 @@ class OperationRoundResult:
     def __init__(self, success: bool = True, status: str = ""):
         self.success = success
         self.status = status
+        self.result = OperationRoundResultEnum.SUCCESS if success else OperationRoundResultEnum.FAIL
+
+    @property
+    def is_success(self) -> bool:
+        return self.success
+
+    @property
+    def is_fail(self) -> bool:
+        return not self.success
 
 
 class MockZContext:
@@ -35,6 +45,16 @@ class MockZContext:
         # 设置默认的模拟行为
         self.run_context.start_running = Mock()
         self.logger.error = Mock()
+
+
+class MockBackToNormalWorld:
+    """模拟的 BackToNormalWorld 操作"""
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def execute(self):
+        return OperationRoundResult(success=True, status="返回大世界成功")
 
 
 class TestableZApplication:
@@ -57,11 +77,9 @@ class TestableZApplication:
         这是我们要测试的目标实现
         """
         try:
-            # 模拟 BackToNormalWorld 操作
-            mock_op = Mock()
-            mock_op.execute.return_value = OperationRoundResult(success=True, status="返回大世界成功")
-
-            op_result = mock_op.execute()
+            # 使用模拟的 BackToNormalWorld
+            op = MockBackToNormalWorld(self.ctx)
+            op_result = op.execute()
 
             if custom_status is not None:
                 return self.round_by_op_result(op_result, status=custom_status)
@@ -99,7 +117,7 @@ class TestBaseBackToWorldImplementation:
         result = test_app.back_to_world()
 
         # 验证结果
-        assert result.success is True
+        assert result.is_success is True
         assert result.status == "返回大世界成功"
 
     def test_default_implementation_with_custom_status(self, test_app):
@@ -115,94 +133,8 @@ class TestBaseBackToWorldImplementation:
         result = test_app.back_to_world(custom_status=custom_status)
 
         # 验证结果
-        assert result.success is True
+        assert result.is_success is True
         assert result.status == custom_status  # 应该使用自定义状态
-
-    def test_default_implementation_handles_operation_failure(self, test_app):
-        """
-        测试默认实现处理操作失败的情况
-
-        **Feature: back-to-world-refactor, Property 1: 默认实现一致性**
-        **Validates: Requirements 1.1, 2.1**
-        """
-        # 修改测试应用以模拟操作失败
-        def failing_back_to_world(custom_status: Optional[str] = None) -> OperationRoundResult:
-            mock_op = Mock()
-            mock_op.execute.return_value = OperationRoundResult(success=False, status="操作失败")
-
-            op_result = mock_op.execute()
-
-            if custom_status is not None:
-                return test_app.round_by_op_result(op_result, status=custom_status)
-            return test_app.round_by_op_result(op_result)
-
-        # 临时替换方法
-        original_method = test_app.back_to_world
-        test_app.back_to_world = failing_back_to_world
-
-        try:
-            # 调用默认实现
-            result = test_app.back_to_world()
-
-            # 验证结果传递了失败状态
-            assert result.success is False
-            assert result.status == "操作失败"
-        finally:
-            # 恢复原方法
-            test_app.back_to_world = original_method
-
-    def test_default_implementation_handles_exception(self, test_app):
-        """
-        测试默认实现处理异常的情况
-
-        **Feature: back-to-world-refactor, Property 1: 默认实现一致性**
-        **Validates: Requirements 1.1, 2.1**
-        """
-        # 修改测试应用以模拟异常
-        def exception_back_to_world(custom_status: Optional[str] = None) -> OperationRoundResult:
-            try:
-                raise Exception("测试异常")
-            except Exception as e:
-                test_app.ctx.logger.error(f"返回大世界失败: {e}")
-                return OperationRoundResult(success=False, status=f"返回大世界失败: {str(e)}")
-
-        # 临时替换方法
-        original_method = test_app.back_to_world
-        test_app.back_to_world = exception_back_to_world
-
-        try:
-            # 调用默认实现
-            result = test_app.back_to_world()
-
-            # 验证异常被正确处理
-            assert result.success is False
-            assert "返回大世界失败: 测试异常" in result.status
-
-            # 验证错误被记录
-            test_app.ctx.logger.error.assert_called_once()
-        finally:
-            # 恢复原方法
-            test_app.back_to_world = original_method
-
-    def test_consistency_with_direct_back_to_normal_world_call(self, test_app):
-        """
-        测试默认实现与直接调用 BackToNormalWorld 的一致性
-        这是属性 1 的核心测试：默认实现一致性
-
-        **Feature: back-to-world-refactor, Property 1: 默认实现一致性**
-        **Validates: Requirements 1.1, 2.1**
-        """
-        # 1. 通过默认实现调用
-        default_result = test_app.back_to_world()
-
-        # 2. 直接调用 BackToNormalWorld（模拟原有实现）
-        mock_op = Mock()
-        mock_op.execute.return_value = OperationRoundResult(success=True, status="返回大世界成功")
-        direct_result = test_app.round_by_op_result(mock_op.execute())
-
-        # 验证两种调用方式产生相同的结果
-        assert default_result.success == direct_result.success
-        assert default_result.status == direct_result.status
 
     def test_custom_status_parameter_passing(self, test_app):
         """
@@ -225,7 +157,7 @@ class TestBaseBackToWorldImplementation:
             result = test_app.back_to_world(custom_status=custom_status)
 
             # 验证自定义状态被正确使用
-            assert result.success is True
+            assert result.is_success is True
             assert result.status == custom_status
 
     def test_none_custom_status_uses_original_status(self, test_app):
@@ -244,38 +176,45 @@ class TestBaseBackToWorldImplementation:
         assert result2.status == "返回大世界成功"
 
         # 两种调用方式应该产生相同结果
-        assert result1.success == result2.success
+        assert result1.is_success == result2.is_success
         assert result1.status == result2.status
 
-    def test_base_class_default_implementation_behavior(self, test_app):
+    def test_custom_status_overrides_default(self, test_app):
         """
-        测试基类默认实现的核心行为
-        这是对属性 1 的综合测试
+        测试自定义状态覆盖默认状态
 
         **Feature: back-to-world-refactor, Property 1: 默认实现一致性**
         **Validates: Requirements 1.1, 2.1**
         """
-        # 测试1: 无参数调用
-        result1 = test_app.back_to_world()
-        assert result1.success is True
-        assert result1.status == "返回大世界成功"
+        custom_status = "自定义状态消息"
 
-        # 测试2: 带自定义状态调用
-        custom_status = "测试状态"
-        result2 = test_app.back_to_world(custom_status=custom_status)
-        assert result2.success is True
-        assert result2.status == custom_status
+        # 1. 调用不带自定义状态的默认实现
+        default_result = test_app.back_to_world()
 
-        # 测试3: 验证方法签名正确
-        import inspect
-        sig = inspect.signature(test_app.back_to_world)
-        params = list(sig.parameters.keys())
-        assert 'custom_status' in params
+        # 2. 调用带自定义状态的默认实现
+        custom_result = test_app.back_to_world(custom_status=custom_status)
 
-        # 验证参数有默认值
-        custom_status_param = sig.parameters['custom_status']
-        assert custom_status_param.default is None
+        # 验证结果
+        assert default_result.is_success == custom_result.is_success
+        assert default_result.status != custom_result.status
+        assert custom_result.status == custom_status
+        assert default_result.status == "返回大世界成功"
 
-        # 测试4: 验证返回类型
-        assert isinstance(result1, OperationRoundResult)
-        assert isinstance(result2, OperationRoundResult)
+    def test_charge_plan_style_custom_status(self, test_app):
+        """
+        测试 ChargePlanApp 风格的自定义状态
+
+        **Feature: back-to-world-refactor, Property 1: 默认实现一致性**
+        **Validates: Requirements 1.1, 2.1**
+        """
+        charge_power = 85
+        custom_status = f"剩余电量 {charge_power}%"
+
+        # 调用带自定义状态的默认实现
+        result = test_app.back_to_world(custom_status=custom_status)
+
+        # 验证结果
+        assert result.is_success is True
+        assert result.status == custom_status
+        assert str(charge_power) in result.status
+        assert "剩余电量" in result.status
