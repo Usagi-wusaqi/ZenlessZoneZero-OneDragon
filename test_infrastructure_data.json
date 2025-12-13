@@ -1,0 +1,157 @@
+{
+  "baseline_results": {
+    "EmailApp_standard": {
+      "app_name": "EmailApp",
+      "method": "back_to_world",
+      "success": true,
+      "status": "返回大世界成功",
+      "execution_time": 2.6226043701171875e-06,
+      "operation_created": true,
+      "execute_called": true
+    },
+    "ScratchCardApp_standard": {
+      "app_name": "ScratchCardApp",
+      "method": "back_to_world",
+      "success": true,
+      "status": "返回大世界成功",
+      "execution_time": 9.5367431640625e-07,
+      "operation_created": true,
+      "execute_called": true
+    },
+    "ChargePlanApp_standard": {
+      "app_name": "ChargePlanApp",
+      "method": "back_to_world",
+      "success": true,
+      "status": "返回大世界成功",
+      "execution_time": 4.76837158203125e-07,
+      "operation_created": true,
+      "execute_called": true
+    },
+    "ChargePlanApp_custom": {
+      "app_name": "ChargePlanApp",
+      "method": "back_to_world_custom",
+      "success": true,
+      "status": "剩余电量 85%",
+      "custom_status_used": true,
+      "execution_time": 1.6689300537109375e-06,
+      "operation_created": true,
+      "execute_called": true
+    }
+  },
+  "test_results": {
+    "consistency_tests": [
+      {
+        "app_name": "EmailApp",
+        "property": "default_implementation_consistency",
+        "passed": true,
+        "details": {
+          "equivalent": true,
+          "differences": {},
+          "baseline": {
+            "app_name": "EmailApp",
+            "method": "back_to_world",
+            "success": true,
+            "status": "返回大世界成功",
+            "execution_time": 2.86102294921875e-06,
+            "operation_created": true,
+            "execute_called": true
+          },
+          "current": {
+            "app_name": "EmailApp_direct",
+            "method": "back_to_world",
+            "success": true,
+            "status": "返回大世界成功",
+            "execution_time": 9.5367431640625e-07,
+            "operation_created": true,
+            "execute_called": true
+          }
+        }
+      },
+      {
+        "app_name": "ScratchCardApp",
+        "property": "default_implementation_consistency",
+        "passed": true,
+        "details": {
+          "equivalent": true,
+          "differences": {},
+          "baseline": {
+            "app_name": "ScratchCardApp",
+            "method": "back_to_world",
+            "success": true,
+            "status": "返回大世界成功",
+            "execution_time": 7.152557373046875e-07,
+            "operation_created": true,
+            "execute_called": true
+          },
+          "current": {
+            "app_name": "ScratchCardApp_direct",
+            "method": "back_to_world",
+            "success": true,
+            "status": "返回大世界成功",
+            "execution_time": 4.76837158203125e-07,
+            "operation_created": true,
+            "execute_called": true
+          }
+        }
+      }
+    ],
+    "status_tests": [
+      {
+        "custom_status": "剩余电量 85%",
+        "property": "custom_status_parameter_passing",
+        "passed": true,
+        "details": {
+          "app_name": "TestApp",
+          "method": "back_to_world_custom",
+          "success": true,
+          "status": "剩余电量 85%",
+          "custom_status_used": true,
+          "execution_time": 1.3113021850585938e-05,
+          "operation_created": true,
+          "execute_called": true
+        }
+      },
+      {
+        "custom_status": "剩余电量 42%",
+        "property": "custom_status_parameter_passing",
+        "passed": true,
+        "details": {
+          "app_name": "TestApp",
+          "method": "back_to_world_custom",
+          "success": true,
+          "status": "剩余电量 42%",
+          "custom_status_used": true,
+          "execution_time": 9.5367431640625e-07,
+          "operation_created": true,
+          "execute_called": true
+        }
+      },
+      {
+        "custom_status": "剩余电量 100%",
+        "property": "custom_status_parameter_passing",
+        "passed": true,
+        "details": {
+          "app_name": "TestApp",
+          "method": "back_to_world_custom",
+          "success": true,
+          "status": "剩余电量 100%",
+          "custom_status_used": true,
+          "execution_time": 7.152557373046875e-07,
+          "operation_created": true,
+          "execute_called": true
+        }
+      }
+    ]
+  },
+  "report": {
+    "infrastructure_status": {
+      "mock_context_creation": true,
+      "mock_application_creation": true,
+      "mock_operation_result_creation": true,
+      "standard_behavior_simulation": true
+    },
+    "baseline_results_count": 4,
+    "test_results_count": 2,
+    "timestamp": 1765615167.1731558
+  }
+}
