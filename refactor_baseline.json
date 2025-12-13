@@ -161,5 +161,168 @@
     "timestamp": "2025-12-13T16:43:20.294004",
     "success": true,
     "error_message": null
+  },
+  {
+    "app_name": "EmailApp",
+    "method_name": "back_to_world",
+    "input_params": {},
+    "output_result": {
+      "app_name": "EmailApp",
+      "method": "back_to_world",
+      "success": true,
+      "status": "返回大世界成功",
+      "execution_time": 5.4836273193359375e-06,
+      "operation_created": true,
+      "execute_called": true
+    },
+    "execution_time": 5.4836273193359375e-06,
+    "timestamp": "2025-12-13T23:06:04.180897",
+    "success": true,
+    "error_message": null
+  },
+  {
+    "app_name": "ScratchCardApp",
+    "method_name": "back_to_world",
+    "input_params": {},
+    "output_result": {
+      "app_name": "ScratchCardApp",
+      "method": "back_to_world",
+      "success": true,
+      "status": "返回大世界成功",
+      "execution_time": 1.430511474609375e-06,
+      "operation_created": true,
+      "execute_called": true
+    },
+    "execution_time": 1.430511474609375e-06,
+    "timestamp": "2025-12-13T23:06:04.180917",
+    "success": true,
+    "error_message": null
+  },
+  {
+    "app_name": "RandomPlayApp",
+    "method_name": "back_to_world",
+    "input_params": {},
+    "output_result": {
+      "app_name": "RandomPlayApp",
+      "method": "back_to_world",
+      "success": true,
+      "status": "返回大世界成功",
+      "execution_time": 4.76837158203125e-07,
+      "operation_created": true,
+      "execute_called": true
+    },
+    "execution_time": 4.76837158203125e-07,
+    "timestamp": "2025-12-13T23:06:04.180920",
+    "success": true,
+    "error_message": null
+  },
+  {
+    "app_name": "NotoriousHuntApp",
+    "method_name": "back_to_world",
+    "input_params": {},
+    "output_result": {
+      "app_name": "NotoriousHuntApp",
+      "method": "back_to_world",
+      "success": true,
+      "status": "返回大世界成功",
+      "execution_time": 7.152557373046875e-07,
+      "operation_created": true,
+      "execute_called": true
+    },
+    "execution_time": 7.152557373046875e-07,
+    "timestamp": "2025-12-13T23:06:04.180922",
+    "success": true,
+    "error_message": null
+  },
+  {
+    "app_name": "LifeOnLineApp",
+    "method_name": "back_to_world",
+    "input_params": {},
+    "output_result": {
+      "app_name": "LifeOnLineApp",
+      "method": "back_to_world",
+      "success": true,
+      "status": "返回大世界成功",
+      "execution_time": 4.76837158203125e-07,
+      "operation_created": true,
+      "execute_called": true
+    },
+    "execution_time": 4.76837158203125e-07,
+    "timestamp": "2025-12-13T23:06:04.180923",
+    "success": true,
+    "error_message": null
+  },
+  {
+    "app_name": "CityFundApp",
+    "method_name": "back_to_world",
+    "input_params": {},
+    "output_result": {
+      "app_name": "CityFundApp",
+      "method": "back_to_world",
+      "success": true,
+      "status": "返回大世界成功",
+      "execution_time": 4.76837158203125e-07,
+      "operation_created": true,
+      "execute_called": true
+    },
+    "execution_time": 4.76837158203125e-07,
+    "timestamp": "2025-12-13T23:06:04.180924",
+    "success": true,
+    "error_message": null
+  },
+  {
+    "app_name": "CoffeeApp",
+    "method_name": "back_to_world",
+    "input_params": {},
+    "output_result": {
+      "app_name": "CoffeeApp",
+      "method": "back_to_world",
+      "success": true,
+      "status": "返回大世界成功",
+      "execution_time": 7.152557373046875e-07,
+      "operation_created": true,
+      "execute_called": true
+    },
+    "execution_time": 7.152557373046875e-07,
+    "timestamp": "2025-12-13T23:06:04.180925",
+    "success": true,
+    "error_message": null
+  },
+  {
+    "app_name": "ChargePlanApp",
+    "method_name": "back_to_world",
+    "input_params": {},
+    "output_result": {
+      "app_name": "ChargePlanApp",
+      "method": "back_to_world",
+      "success": true,
+      "status": "返回大世界成功",
+      "execution_time": 7.152557373046875e-07,
+      "operation_created": true,
+      "execute_called": true
+    },
+    "execution_time": 7.152557373046875e-07,
+    "timestamp": "2025-12-13T23:06:04.180927",
+    "success": true,
+    "error_message": null
+  },
+  {
+    "app_name": "ChargePlanApp",
+    "method_name": "back_to_world_custom",
+    "input_params": {},
+    "output_result": {
+      "app_name": "ChargePlanApp",
+      "method": "back_to_world_custom",
+      "success": true,
+      "status": "剩余电量 85%",
+      "custom_status_used": true,
+      "execution_time": 2.1457672119140625e-06,
+      "operation_created": true,
+      "execute_called": true
+    },
+    "execution_time": 2.1457672119140625e-06,
+    "timestamp": "2025-12-13T23:06:04.180928",
+    "success": true,
+    "error_message": null
   }
 ]

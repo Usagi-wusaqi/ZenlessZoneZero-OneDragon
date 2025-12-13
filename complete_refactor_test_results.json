@@ -5,7 +5,7 @@
       "method": "back_to_world",
       "success": true,
       "status": "返回大世界成功",
-      "execution_time": 5.0067901611328125e-06,
+      "execution_time": 5.4836273193359375e-06,
       "operation_created": true,
       "execute_called": true
     },
@@ -23,7 +23,7 @@
       "method": "back_to_world",
       "success": true,
       "status": "返回大世界成功",
-      "execution_time": 9.5367431640625e-07,
+      "execution_time": 4.76837158203125e-07,
       "operation_created": true,
       "execute_called": true
     },
@@ -59,7 +59,7 @@
       "method": "back_to_world",
       "success": true,
       "status": "返回大世界成功",
-      "execution_time": 4.76837158203125e-07,
+      "execution_time": 7.152557373046875e-07,
       "operation_created": true,
       "execute_called": true
     },
@@ -68,7 +68,7 @@
       "method": "back_to_world",
       "success": true,
       "status": "返回大世界成功",
-      "execution_time": 4.76837158203125e-07,
+      "execution_time": 7.152557373046875e-07,
       "operation_created": true,
       "execute_called": true
     },
@@ -78,7 +78,7 @@
       "success": true,
       "status": "剩余电量 85%",
       "custom_status_used": true,
-      "execution_time": 1.6689300537109375e-06,
+      "execution_time": 2.1457672119140625e-06,
       "operation_created": true,
       "execute_called": true
     }
@@ -103,7 +103,7 @@
           "method": "back_to_world",
           "success": true,
           "status": "返回大世界成功",
-          "execution_time": 5.0067901611328125e-06,
+          "execution_time": 5.4836273193359375e-06,
           "operation_created": true,
           "execute_called": true
         },
@@ -121,7 +121,7 @@
           "method": "back_to_world",
           "success": true,
           "status": "返回大世界成功",
-          "execution_time": 9.5367431640625e-07,
+          "execution_time": 4.76837158203125e-07,
           "operation_created": true,
           "execute_called": true
         },
@@ -157,7 +157,7 @@
           "method": "back_to_world",
           "success": true,
           "status": "返回大世界成功",
-          "execution_time": 4.76837158203125e-07,
+          "execution_time": 7.152557373046875e-07,
           "operation_created": true,
           "execute_called": true
         },
@@ -166,7 +166,7 @@
           "method": "back_to_world",
           "success": true,
           "status": "返回大世界成功",
-          "execution_time": 4.76837158203125e-07,
+          "execution_time": 7.152557373046875e-07,
           "operation_created": true,
           "execute_called": true
         },
@@ -176,7 +176,7 @@
           "success": true,
           "status": "剩余电量 85%",
           "custom_status_used": true,
-          "execution_time": 1.6689300537109375e-06,
+          "execution_time": 2.1457672119140625e-06,
           "operation_created": true,
           "execute_called": true
         }
@@ -184,10 +184,10 @@
     },
     "property_tests": {
       "results": [
-        "PropertyTestResult(property_name='默认实现一致性', passed=True, iterations=50, failed_example=None, error_message=None, execution_time=0.00011539459228515625)",
-        "PropertyTestResult(property_name='自定义状态参数传递', passed=True, iterations=50, failed_example=None, error_message=None, execution_time=0.00010848045349121094)",
-        "PropertyTestResult(property_name='子类覆盖保持独立性', passed=True, iterations=50, failed_example=None, error_message=None, execution_time=2.86102294921875e-06)",
-        "PropertyTestResult(property_name='重构后行为等价性', passed=True, iterations=50, failed_example=None, error_message=None, execution_time=8.678436279296875e-05)"
+        "PropertyTestResult(property_name='默认实现一致性', passed=True, iterations=50, failed_example=None, error_message=None, execution_time=0.00011491775512695312)",
+        "PropertyTestResult(property_name='自定义状态参数传递', passed=True, iterations=50, failed_example=None, error_message=None, execution_time=0.00023794174194335938)",
+        "PropertyTestResult(property_name='子类覆盖保持独立性', passed=True, iterations=50, failed_example=None, error_message=None, execution_time=2.6226043701171875e-06)",
+        "PropertyTestResult(property_name='重构后行为等价性', passed=True, iterations=50, failed_example=None, error_message=None, execution_time=0.00011277198791503906)"
       ],
       "passed": 4,
       "total": 4,
@@ -217,7 +217,7 @@
               "method": "back_to_world",
               "success": true,
               "status": "返回大世界成功",
-              "execution_time": 1.1920928955078125e-06,
+              "execution_time": 1.9073486328125e-06,
               "operation_created": true,
               "execute_called": true
             }
@@ -230,7 +230,7 @@
               "method": "back_to_world",
               "success": true,
               "status": "返回大世界成功",
-              "execution_time": 2.6226043701171875e-06,
+              "execution_time": 3.337860107421875e-06,
               "operation_created": true,
               "execute_called": true
             }
@@ -245,7 +245,7 @@
               "method": "back_to_world",
               "success": true,
               "status": "返回大世界成功",
-              "execution_time": 3.5762786865234375e-06,
+              "execution_time": 1.430511474609375e-06,
               "operation_created": true,
               "execute_called": true
             }
@@ -260,7 +260,7 @@
               "method": "back_to_world",
               "success": true,
               "status": "返回大世界成功",
-              "execution_time": 2.1457672119140625e-06,
+              "execution_time": 1.1920928955078125e-06,
               "operation_created": true,
               "execute_called": true
             }
@@ -273,7 +273,7 @@
               "method": "back_to_world",
               "success": true,
               "status": "返回大世界成功",
-              "execution_time": 1.1920928955078125e-06,
+              "execution_time": 7.152557373046875e-07,
               "operation_created": true,
               "execute_called": true
             }
@@ -294,6 +294,6 @@
     },
     "baseline_results_count": 9,
     "test_results_count": 4,
-    "timestamp": 1765615400.2968574
+    "timestamp": 1765638364.1842177
   }
 }
