@@ -1,3 +1,5 @@
+from typing import Optional
+
 from one_dragon.base.operation.operation_edge import node_from
 from one_dragon.base.operation.operation_node import operation_node
 from one_dragon.base.operation.operation_notify import node_notify, NotifyTiming
@@ -5,7 +7,6 @@ from one_dragon.base.operation.operation_round_result import OperationRoundResul
 from zzz_od.application.email_app import email_app_const
 from zzz_od.application.zzz_application import ZApplication
 from zzz_od.context.zzz_context import ZContext
-from zzz_od.operation.back_to_normal_world import BackToNormalWorld
 
 
 class EmailApp(ZApplication):
@@ -75,6 +76,5 @@ class EmailApp(ZApplication):
     @node_from(from_name='返回菜单')
     @node_from(from_name='返回菜单', success=False)
     @operation_node(name='返回大世界')
-    def back_to_world(self) -> OperationRoundResult:
-        op = BackToNormalWorld(self.ctx)
-        return self.round_by_op_result(op.execute())
+    def back_to_world(self, custom_status: Optional[str] = None) -> OperationRoundResult:
+        return super().back_to_world(custom_status)

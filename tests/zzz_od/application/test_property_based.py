@@ -38,8 +38,8 @@ def property_test_context():
 
 @pytest.fixture
 def property_test_app(property_test_context):
-"""提供属性测试的应用实例"""
-opertyTestApplication(property_test_context)
+    """提供属性测试的应用实例"""
+    return PropertyTestApplication(property_test_context)
 
 
 class TestBackToWorldProperties:
@@ -60,12 +60,13 @@ class TestBackToWorldProperties:
         assume(custom_status.strip())
 
         with patch('zzz_od.operation.back_to_normal_world.BackToNormalWorld') as mock_class:
-            mock_instance = Mock          expected_result = OperationRoundResult(success=True, status="返回大世界成功")
+            mock_instance = Mock()
+            expected_result = OperationRoundResult(success=True, status="返回大世界成功")
             mock_instance.execute.return_value = expected_result
             mock_class.return_value = mock_instance
 
             # 测试应用是否有 back_to_world 方法（应该继承默认实现）
-sattr(property_test_app, 'back_to_world'):
+            if hasattr(property_test_app, 'back_to_world'):
                 app_result = property_test_app.back_to_world()
             else:
                 # 模拟默认实现

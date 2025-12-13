@@ -53,12 +53,13 @@ class TestableZApplication:
         try:
             # 模拟 BackToNormalWorld 的导入和使用
             # 直接创建模拟对象，不依赖实际的导入路径
+            mock_op = Mock()
             mock_op.execute.return_value = OperationRoundResult(result=OperationRoundResultEnum.SUCCESS, status="返回大世界成功")
-                op_result = mock_op.execute()
+            op_result = mock_op.execute()
 
-                if custom_status is not None:
-                    return self.round_by_op_result(op_result, status=custom_status)
-                return self.round_by_op_result(op_result)
+            if custom_status is not None:
+                return self.round_by_op_result(op_result, status=custom_status)
+            return self.round_by_op_result(op_result)
 
         except Exception as e:
             # 记录错误并返回失败结果
