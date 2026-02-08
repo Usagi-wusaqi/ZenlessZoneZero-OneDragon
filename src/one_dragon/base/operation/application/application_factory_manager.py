@@ -442,11 +442,19 @@ class ApplicationFactoryManager:
             factory_module=factory_module_name,
         )
 
-        # 尝试加载对应的 const 模块
-        *prefix_parts, last_part = factory_module_name.rsplit('.', 1)
-        if last_part.endswith(self._factory_module_suffix):
-            last_part = last_part[:-len(self._factory_module_suffix)] + self._const_module_suffix
-        const_module_name = f"{prefix_parts[0]}.{last_part}" if prefix_parts else last_part
+        # 查找 factory 同目录下的 const 文件
+        const_file = None
+        for f in factory_file.parent.iterdir():
+            if f.is_file() and f.suffix == '.py' and f.stem.endswith(self._const_module_suffix):
+                const_file = f
+                break
+
+        if const_file is None:
+            raise ImportError(f"插件 {factory.app_id} 缺少 *{self._const_module_suffix}.py 文件")
+
+        # 与 factory 相同的包前缀 + const 文件名
+        package_prefix, _, _ = factory_module_name.rpartition('.')
+        const_module_name = f"{package_prefix}.{const_file.stem}" if package_prefix else const_file.stem
 
         if const_module_name in sys.modules:
             const_module = sys.modules[const_module_name]
