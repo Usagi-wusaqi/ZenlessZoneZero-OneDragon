@@ -78,10 +78,17 @@ class CityFundApp(ZApplication):
     @node_from(from_name='点击成长任务', status='按钮-确认')
     @node_from(from_name='等级全部领取')
     @node_from(from_name='等级全部领取', success=False)
+    @operation_node(name='左上角返回')
+    def click_back(self) -> OperationRoundResult:
+        # 购买大月卡后出现“已完成购买”无法返回大世界 issue #2005
+        return self.round_by_find_and_click_area(self.last_screenshot, '画面-通用', '返回',
+                                                 success_wait=1, retry_wait=1)
+
+    @node_from(from_name='左上角返回')
     @node_notify(when=NotifyTiming.CURRENT_SUCCESS)
     @operation_node(name='完成后返回')
     def back_to_world(self) -> OperationRoundResult:
-        op = BackToNormalWorld(self.ctx)
+        op = BackToNormalWorld(self.ctx) # 会点击右下角的“完成”
         return self.round_by_op_result(op.execute())
 
 
