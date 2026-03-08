@@ -5,10 +5,10 @@ area_list:
 - area_name: 对话框标题
   id_mark: false
   pc_rect:
-  - 874
-  - 798
-  - 1056
-  - 832
+  - 810
+  - 770
+  - 1110
+  - 830
   text: ''
   lcs_percent: 0.5
   template_sub_dir: ''
