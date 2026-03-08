@@ -1318,9 +1318,9 @@
     id_mark: false
     pc_rect:
     - 1680
-    - 106
+    - 20
     - 1840
-    - 164
+    - 165
     text: ''
     lcs_percent: 1.0
     template_sub_dir: ''
