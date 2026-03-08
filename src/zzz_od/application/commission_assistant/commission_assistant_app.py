@@ -81,6 +81,7 @@ class CommissionAssistantApp(ZApplication):
                 self.run_mode = 0
 
     @node_from(from_name='自动战斗模式')
+    @node_from(from_name='剧情模式')
     @node_from(from_name='钓鱼')
     @node_from(from_name='钓鱼', success=False)
     @operation_node(name='自动对话模式', is_start_node=True)
@@ -324,51 +325,52 @@ class CommissionAssistantApp(ZApplication):
 
     def check_story_mode(self) -> OperationRoundResult | None:
         """
-        判断是否进入了剧情模式 右上角有 等待/自动/跳过
+        判断是否进入了剧情模式 右上角有 菜单/跳过/自动
         """
-        area = self.ctx.screen_loader.get_area('委托助手', '文本-剧情右上角')
-        ocr_result_list = self.ctx.ocr_service.get_ocr_result_list(
-            image=self.last_screenshot,
-            rect=area.rect,
-            crop_first=False,
-        )
-
-        target_word_list = [
-            gt(i, 'game')
-            for i in ['菜单', '自动', '跳过']
-        ]
-
-        idx = -1
-        for ocr_result in ocr_result_list:
-            idx = str_utils.find_best_match_by_difflib(ocr_result.data, target_word_list, cutoff=1)
-            if idx is not None:
-                break
-
-        if idx == -1:  # 不在剧情模式
-            return None
-
         if self.config.story_mode == StoryMode.CLICK.value.value:
-            return None  # 返回外层点击
-        elif self.config.story_mode == StoryMode.AUTO.value.value:
-            if idx == 1:  # 自动
+            return None
+        area = self.ctx.screen_loader.get_area('委托助手', '文本-剧情右上角')
+        if any(self.round_by_ocr(self.last_screenshot, t, area=area).is_success
+               for t in ['菜单', '跳过', '自动']):
+            return self.round_success('剧情模式')
+        return None
+
+    @node_from(from_name='自动对话模式', status='剧情模式')
+    @operation_node(name='剧情模式')
+    def story_mode(self) -> OperationRoundResult:
+        """
+        剧情模式：右上角有 菜单/自动/跳过
+        - 自动点击模式: 不处理 交给外层点击
+        - 自动播放模式: OCR识别并点击 菜单→自动
+        - 跳过剧情模式: 每轮OCR识别并点击一次 依靠循环推进
+          有菜单点菜单 有跳过点跳过 确认对话框点确认
+        """
+        # 自动点击模式
+        if self.config.story_mode == StoryMode.CLICK.value.value:
+            return self.round_success()
+
+        area = self.ctx.screen_loader.get_area('委托助手', '文本-剧情右上角')
+
+        # 自动播放模式
+        if self.config.story_mode == StoryMode.AUTO.value.value:
+            # 已是自动
+            result = self.round_by_ocr(self.last_screenshot, '自动', area=area)
+            if result.is_success:
                 return self.round_wait('剧情自动播放中 选项需手动点击', wait=1)
-            else:  # 切换到自动
-                if idx != 0:
-                    self.round_by_click_area('委托助手', '文本-剧情右上角', success_wait=1)  # 切换到菜单
-                self.round_by_click_area('委托助手', '文本-剧情右上角', success_wait=1)  # 点击菜单
-                self.round_by_click_area('委托助手', '按钮-自动', success_wait=1)  # 点击自动
+            # 不是自动 → 点菜单 + 等展开 + 点自动
+            self.round_by_ocr_and_click(self.last_screenshot, '菜单', area=area, success_wait=1)
+            result = self.round_by_find_and_click_area(self.screenshot(), '委托助手', '按钮-自动')
+            if result.is_success:
                 return self.round_wait('尝试切换到自动模式')
-        else:
-            if idx != 0:
-                self.round_by_click_area('委托助手', '文本-剧情右上角', success_wait=1)  # 切换到菜单
-            self.round_by_click_area('委托助手', '文本-剧情右上角', success_wait=1)  # 点击菜单
-            self.round_by_click_area('委托助手', '文本-剧情右上角', success_wait=1)  # 点击跳过
-            screen2 = self.screenshot()
-            result = self.round_by_find_and_click_area(screen2, '委托助手', '对话框确认', crop_first=False)
+            return self.round_success()
+
+        # 跳过剧情模式
+        if self.config.story_mode == StoryMode.SKIP.value.value:
+            self.round_by_ocr_and_click_by_priority(['跳过', '菜单', '自动'], area=area, success_wait=1)
+            result = self.round_by_find_and_click_area(self.screenshot(), '委托助手', '对话框确认', crop_first=False)
             if result.is_success:
                 return self.round_wait('跳过剧情')
-
-        return None
+        return self.round_success()
 
     @node_from(from_name='自动对话模式', status='钓鱼')
     @operation_node('钓鱼', node_max_retry_times=50)  # 约5s没识别到指令就退出
