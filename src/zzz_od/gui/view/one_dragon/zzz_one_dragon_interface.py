@@ -1,9 +1,9 @@
 from qfluentwidgets import FluentIcon
-from typing import List
 
 from one_dragon_qt.widgets.pivot_navi_interface import PivotNavigatorInterface
 from one_dragon_qt.widgets.setting_card.app_run_card import AppRunCard
 from zzz_od.context.zzz_context import ZContext
+from zzz_od.gui.view.one_dragon.mouse_sensitivity_checker_interface import MouseSensitivityCheckerInterface
 from zzz_od.gui.view.one_dragon.setting_team_interface import SettingTeamInterface
 from zzz_od.gui.view.one_dragon.zzz_one_dragon_run_interface import ZOneDragonRunInterface
 
@@ -20,11 +20,12 @@ class ZOneDragonInterface(PivotNavigatorInterface):
             nav_text_cn='一条龙'
         )
 
-        self._app_run_cards: List[AppRunCard] = []
+        self._app_run_cards: list[AppRunCard] = []
 
     def create_sub_interface(self):
         self.add_sub_interface(ZOneDragonRunInterface(self.ctx))
         self.add_sub_interface(SettingTeamInterface(self.ctx))
+        self.add_sub_interface(MouseSensitivityCheckerInterface(self.ctx))
 
     def on_interface_shown(self):
         super().on_interface_shown()
