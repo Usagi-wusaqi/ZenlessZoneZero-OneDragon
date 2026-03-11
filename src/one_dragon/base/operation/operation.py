@@ -34,6 +34,7 @@ from one_dragon.utils.log_utils import log
 if TYPE_CHECKING:
     from one_dragon.base.operation.one_dragon_context import OneDragonContext
 
+
 class NodeStateProxy:
     """
     一个代理类，用于安全、便捷地访问节点的静态信息和动态执行结果。
@@ -775,6 +776,7 @@ class Operation(OperationBase):
         screen: MatLike | None = None,
         screen_name: str | None = None,
         area_name: str | None = None,
+        pre_delay: float = 0.3,
         success_wait: float | None = None,
         success_wait_round: float | None = None,
         retry_wait: float | None = None,
@@ -789,6 +791,7 @@ class Operation(OperationBase):
             screen: 截图图像。默认为None（将截取新截图）。
             screen_name: 屏幕名称。默认为None。
             area_name: 区域名称。默认为None。
+            pre_delay: 点击前等待时间（秒）。默认为0.3秒。
             success_wait: 成功后等待时间（秒）。默认为None。
             success_wait_round: 成功后等待直到轮次时间达到此值，如果设置了success_wait则忽略。默认为None。
             retry_wait: 失败后等待时间（秒）。默认为None。
@@ -840,6 +843,7 @@ class Operation(OperationBase):
             if not any_found:
                 return self.round_success(status=area_name, wait=success_wait, wait_round_time=success_wait_round)
 
+        time.sleep(pre_delay)
         click = screen_utils.find_and_click_area(
             ctx=self.ctx,
             screen=screen,
@@ -948,8 +952,35 @@ class Operation(OperationBase):
         else:
             return self.round_retry(status=f'未找到 {area_name}', wait=retry_wait, wait_round_time=retry_wait_round)
 
+    def scroll_area(
+            self,
+            screen_name: str | None = None,
+            area_name: str | None = None,
+            direction: str = 'down',
+            start_ratio: float = 0.9,
+            end_ratio: float = 0.1,
+    ) -> None:
+        """在指定区域内滚动屏幕。
+
+        Args:
+            screen_name: 屏幕名称。默认为None。
+            area_name: 区域名称。默认为None。
+            direction: 滚动方向，'down' 表示往下滚（从下往上滑），'up' 表示往上滚（从上往下滑）
+            start_ratio: 起始位置比例（距顶部的比例）。默认0.9，即区域底部10%处
+            end_ratio: 结束位置比例（距顶部的比例）。默认0.1，即区域顶部10%处
+        """
+        if screen_name is None or area_name is None:
+            return
+
+        area = self.ctx.screen_loader.get_area(screen_name, area_name)
+        if area is None:
+            return
+
+        screen_utils.scroll_area(self.ctx, area, direction, start_ratio, end_ratio)
+
     def round_by_click_area(
             self, screen_name: str, area_name: str, click_left_top: bool = False,
+            pre_delay: float = 0.0,
             success_wait: float | None = None, success_wait_round: float | None = None,
             retry_wait: float | None = None, retry_wait_round: float | None = None
     ) -> OperationRoundResult:
@@ -959,6 +990,7 @@ class Operation(OperationBase):
             screen_name: 屏幕名称。
             area_name: 区域名称。
             click_left_top: 是否点击左上角。默认为False。
+            pre_delay: 点击前等待时间（秒）。默认为0.0秒。
             success_wait: 成功后等待时间（秒）。默认为None。
             success_wait_round: 成功后等待直到轮次时间达到此值，如果设置了success_wait则忽略。默认为None。
             retry_wait: 失败后等待时间（秒）。默认为None。
@@ -975,7 +1007,8 @@ class Operation(OperationBase):
             to_click = area.left_top
         else:
             to_click = area.center
-        click = self.ctx.controller.click(pos=to_click, pc_alt=area.pc_alt)
+        time.sleep(pre_delay)
+        click = self.ctx.controller.click(pos=to_click, pc_alt=area.pc_alt, gamepad_key=area.gamepad_key)
         if click:
             self.update_screen_after_operation(screen_name, area_name)
             return self.round_success(status=area_name, wait=success_wait, wait_round_time=success_wait_round)
@@ -988,6 +1021,7 @@ class Operation(OperationBase):
         target_cn: str,
         area: Optional[ScreenArea] = None,
         lcs_percent: float = 0.5,
+        pre_delay: float = 0.3,
         success_wait: float | None = None,
         success_wait_round: float | None = None,
         retry_wait: float | None = None,
@@ -995,6 +1029,7 @@ class Operation(OperationBase):
         color_range: list[list[int]] | None = None,
         offset: Point | None = None,
         crop_first: bool = True,
+        remove_whitespace: bool = False,
     ) -> OperationRoundResult:
         """使用OCR在区域内查找目标文本并点击。
 
@@ -1004,12 +1039,14 @@ class Operation(OperationBase):
             area: 要搜索的目标区域。默认为None（搜索整个屏幕）。
             crop_first: 在传入区域时 是否先裁剪再进行文本识别
             lcs_percent: 文本匹配阈值。默认为0.5。
+            pre_delay: 点击前等待时间（秒）。默认为0.3秒。
             success_wait: 成功后等待时间（秒）。默认为None。
             success_wait_round: 成功后等待直到轮次时间达到此值，如果设置了success_wait则忽略。默认为None。
             retry_wait: 失败后等待时间（秒）。默认为None。
             retry_wait_round: 失败后等待直到轮次时间达到此值，如果设置了retry_wait则忽略。默认为None。
             color_range: 文本匹配的颜色范围。默认为None。
             offset: 点击位置的偏移量。默认为None。
+            remove_whitespace: 文本匹配前是否清洗空白字符。默认为False。
 
         Returns:
             OperationRoundResult: 点击结果。
@@ -1022,6 +1059,15 @@ class Operation(OperationBase):
             color_range=color_range,
             crop_first=crop_first,
         )
+        if remove_whitespace:
+            # 移除空白字符，提升文本匹配兼容性
+            target_cn = str_utils.remove_whitespace(target_cn)
+            # 清理OCR结果字典的键：移除所有键中的空白字符
+            # 若清理后出现重复键，后遍历到的键值对会覆盖先遍历到的
+            ocr_result_map = {
+                str_utils.remove_whitespace(key): val
+                for key, val in ocr_result_map.items()
+            }
 
         to_click: Point | None = None
         ocr_result_list: list[str] = []
@@ -1051,6 +1097,7 @@ class Operation(OperationBase):
         if offset is not None:
             to_click = to_click + offset
 
+        time.sleep(pre_delay)
         click = self.ctx.controller.click(to_click)
         if click:
             return self.round_success(target_cn, wait=success_wait, wait_round_time=success_wait_round)
@@ -1063,6 +1110,7 @@ class Operation(OperationBase):
         screen: MatLike | None = None,
         ignore_cn_list: list[str] | None = None,
         area: Optional[ScreenArea] = None,
+        pre_delay: float = 0.3,
         success_wait: float | None = None,
         success_wait_round: float | None = None,
         retry_wait: float | None = None,
@@ -1079,6 +1127,7 @@ class Operation(OperationBase):
             ignore_cn_list: 要忽略的文本列表。目标列表中的某些元素仅用于防止匹配错误，例如["领取", "已领取"]可以防止"已领取*1"匹配到"领取"，而"已领取"不需要实际匹配。默认为None。
             area: 要搜索的目标区域。默认为None。
             crop_first: 在传入区域时 是否先裁剪再进行文本识别
+            pre_delay: 点击前等待时间（秒）。默认为0.3秒。
             success_wait: 成功后等待时间（秒）。默认为None。
             success_wait_round: 成功后等待直到轮次时间达到此值，如果设置了success_wait则忽略。默认为None。
             retry_wait: 失败后等待时间（秒）。默认为None。
@@ -1112,8 +1161,88 @@ class Operation(OperationBase):
             if offset is not None:
                 to_click = to_click + offset
 
+            time.sleep(pre_delay)
             self.ctx.controller.click(to_click)
             return self.round_success(status=match_word, wait=success_wait, wait_round_time=success_wait_round)
+
+        return self.round_retry(status='未匹配到目标文本', wait=retry_wait, wait_round_time=retry_wait_round)
+
+    def round_by_ocr_and_click_with_action(
+        self,
+        target_action_list: list[tuple[str, OperationRoundResultEnum]],
+        screen: MatLike | None = None,
+        area: ScreenArea | None = None,
+        pre_delay: float = 0.3,
+        success_wait: float | None = None,
+        success_wait_round: float | None = None,
+        wait_wait: float | None = None,
+        wait_wait_round: float | None = None,
+        retry_wait: float | None = None,
+        retry_wait_round: float | None = None,
+        color_range: list[list[int]] | None = None,
+        offset: Point | None = None,
+        crop_first: bool = True,
+    ) -> OperationRoundResult:
+        """使用OCR按优先级查找文本并点击，支持为不同目标指定不同的返回动作。
+
+        Args:
+            target_action_list: 目标文本和动作的元组列表。列表顺序决定优先级。
+                每个元组为 (目标文本, OperationRoundResultEnum)。
+                支持的动作: SUCCESS（进入下一节点）、WAIT（继续当前节点）、RETRY（重试）。
+                示例: [('出战', OperationRoundResultEnum.SUCCESS), ('下一步', OperationRoundResultEnum.WAIT)]
+            screen: 游戏截图。默认为None（使用 last_screenshot）。
+            area: 要搜索的目标区域。默认为None（搜索整个屏幕）。
+            crop_first: 在传入区域时 是否先裁剪再进行文本识别。默认为True。
+            pre_delay: 点击前等待时间（秒）。默认为0.3秒。
+            success_wait: 匹配到 SUCCESS 动作后等待时间（秒）。默认为None。
+            success_wait_round: 匹配到 SUCCESS 动作后等待直到轮次时间达到此值。默认为None。
+            wait_wait: 匹配到 WAIT 动作后等待时间（秒）。默认为None。
+            wait_wait_round: 匹配到 WAIT 动作后等待直到轮次时间达到此值。默认为None。
+            retry_wait: 未匹配到任何目标时等待时间（秒）。默认为None。
+            retry_wait_round: 未匹配到任何目标时等待直到轮次时间达到此值。默认为None。
+            color_range: 文本匹配的颜色范围。默认为None。
+            offset: 点击位置的偏移量。默认为None。
+
+        Returns:
+            OperationRoundResult: 根据匹配目标返回对应的结果类型。
+        """
+        if screen is None:
+            screen = self.last_screenshot
+
+        if color_range is None and area is not None:
+            color_range = area.color_range
+
+        ocr_result_map = self.ctx.ocr_service.get_ocr_result_map(
+            image=screen,
+            rect=area.rect if area is not None else None,
+            color_range=color_range,
+            crop_first=crop_first,
+        )
+
+        # 从元组列表构建目标列表和动作映射
+        target_cn_list = [target for target, _ in target_action_list]
+        action_map = dict(target_action_list)
+
+        match_word, match_word_mrl = ocr_utils.match_word_list_by_priority(
+            ocr_result_map,
+            target_cn_list,
+        )
+
+        if match_word is not None and match_word_mrl is not None and match_word_mrl.max is not None:
+            to_click = match_word_mrl.max.center
+            if offset is not None:
+                to_click = to_click + offset
+
+            time.sleep(pre_delay)
+            self.ctx.controller.click(to_click)
+
+            action = action_map.get(match_word, OperationRoundResultEnum.SUCCESS)
+            if action == OperationRoundResultEnum.WAIT:
+                return self.round_wait(status=match_word, wait=wait_wait, wait_round_time=wait_wait_round)
+            elif action == OperationRoundResultEnum.RETRY:
+                return self.round_retry(status=match_word, wait=retry_wait, wait_round_time=retry_wait_round)
+            else:  # SUCCESS
+                return self.round_success(status=match_word, wait=success_wait, wait_round_time=success_wait_round)
 
         return self.round_retry(status='未匹配到目标文本', wait=retry_wait, wait_round_time=retry_wait_round)
 
