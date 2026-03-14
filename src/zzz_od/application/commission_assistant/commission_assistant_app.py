@@ -139,19 +139,25 @@ class CommissionAssistantApp(ZApplication):
         if result is not None:
             return result
 
+        return self._do_dialog_click()
+
+    def _do_dialog_click(self) -> OperationRoundResult:
+        """
+        普通的对话点击：选项、对话框标题/中间区域
+        """
         if self._click_dialog_options(self.last_screenshot, '右侧选项区域'):
             return self.round_wait(status='点击右方选项',
-                                   wait=config.dialog_click_interval)
+                                   wait=self.config.dialog_click_interval)
 
         if self._click_dialog_options(self.last_screenshot, '中间选项区域'):
             return self.round_wait(status='点击中间选项',
-                                   wait=config.dialog_click_interval)
+                                   wait=self.config.dialog_click_interval)
 
         with_dialog = self._check_dialog(self.last_screenshot)
         if with_dialog:
             self.round_by_click_area('委托助手', '中间选项区域')
             return self.round_wait(status='对话中点击空白',
-                                   wait=config.dialog_click_interval)
+                                   wait=self.config.dialog_click_interval)
 
         self.round_by_click_area('委托助手', '中间选项区域')
         return self.round_wait(status='未知画面点击空白', wait=1)
@@ -340,15 +346,11 @@ class CommissionAssistantApp(ZApplication):
     def story_mode(self) -> OperationRoundResult:
         """
         剧情模式：右上角有 菜单/自动/跳过
-        - 自动点击模式: 不处理 交给外层点击
         - 自动播放模式: OCR识别并点击 菜单→自动
         - 跳过剧情模式: 每轮OCR识别并点击一次 依靠循环推进
           有菜单点菜单 有跳过点跳过 确认对话框点确认
+        - 自动点击模式: 不处理 交给外层点击
         """
-        # 自动点击模式
-        if self.config.story_mode == StoryMode.CLICK.value.value:
-            return self.round_success()
-
         area = self.ctx.screen_loader.get_area('委托助手', '文本-剧情右上角')
 
         # 自动播放模式
@@ -362,7 +364,6 @@ class CommissionAssistantApp(ZApplication):
             result = self.round_by_find_and_click_area(self.screenshot(), '委托助手', '按钮-自动')
             if result.is_success:
                 return self.round_wait('尝试切换到自动模式')
-            return self.round_success()
 
         # 跳过剧情模式
         if self.config.story_mode == StoryMode.SKIP.value.value:
@@ -370,7 +371,10 @@ class CommissionAssistantApp(ZApplication):
             result = self.round_by_find_and_click_area(self.screenshot(), '委托助手', '对话框确认', crop_first=False)
             if result.is_success:
                 return self.round_wait('跳过剧情')
-        return self.round_success()
+
+        # 自动点击模式
+        # 文本-剧情右上角某些情况下是没有内容可点击的
+        return self._do_dialog_click()
 
     @node_from(from_name='自动对话模式', status='钓鱼')
     @operation_node('钓鱼', node_max_retry_times=50)  # 约5s没识别到指令就退出
