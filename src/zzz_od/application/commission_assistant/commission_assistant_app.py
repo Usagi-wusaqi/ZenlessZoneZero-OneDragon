@@ -5,6 +5,7 @@ from cv2.typing import MatLike
 
 from one_dragon.base.geometry.point import Point
 from one_dragon.base.matcher.match_result import MatchResult
+from one_dragon.base.matcher.ocr import ocr_utils
 from one_dragon.base.operation.application import application_const
 from one_dragon.base.operation.context_event_bus import ContextEventItem
 from one_dragon.base.operation.one_dragon_context import ContextKeyboardEventEnum
@@ -336,14 +337,14 @@ class CommissionAssistantApp(ZApplication):
         if self.config.story_mode == StoryMode.CLICK.value.value:
             return None
         area = self.ctx.screen_loader.get_area('委托助手', '文本-剧情右上角')
-        ocr_result_list = self.ctx.ocr_service.get_ocr_result_list(
+        ocr_result_map = self.ctx.ocr_service.get_ocr_result_map(
             image=self.last_screenshot,
             rect=area.rect,
             crop_first=False,
         )
-        ocr_word_list = [i.data for i in ocr_result_list]
         keywords = ['菜单', '跳过', '自动']
-        if any(str_utils.find_best_match_by_difflib(keyword, ocr_word_list) is not None for keyword in keywords):
+        match_word, _ = ocr_utils.match_word_list_by_priority(ocr_result_map, keywords)
+        if match_word is not None:
             return self.round_success('剧情模式')
         return None
 
