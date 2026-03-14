@@ -336,8 +336,14 @@ class CommissionAssistantApp(ZApplication):
         if self.config.story_mode == StoryMode.CLICK.value.value:
             return None
         area = self.ctx.screen_loader.get_area('委托助手', '文本-剧情右上角')
-        if any(self.round_by_ocr(self.last_screenshot, t, area=area).is_success
-               for t in ['菜单', '跳过', '自动']):
+        ocr_result_list = self.ctx.ocr_service.get_ocr_result_list(
+            image=self.last_screenshot,
+            rect=area.rect,
+            crop_first=False,
+        )
+        ocr_word_list = [i.data for i in ocr_result_list]
+        keywords = ['菜单', '跳过', '自动']
+        if any(str_utils.find_best_match_by_difflib(keyword, ocr_word_list) is not None for keyword in keywords):
             return self.round_success('剧情模式')
         return None
 
