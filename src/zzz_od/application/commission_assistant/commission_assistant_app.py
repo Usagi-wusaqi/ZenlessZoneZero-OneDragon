@@ -362,22 +362,29 @@ class CommissionAssistantApp(ZApplication):
 
         # 自动播放模式
         if self.config.story_mode == StoryMode.AUTO.value.value:
-            # 已是自动
+            # 文本-剧情左上角，显示'自动'
             result = self.round_by_ocr(self.last_screenshot, '自动', area=area)
             if result.is_success:
                 return self.round_wait('剧情自动播放中 选项需手动点击', wait=1)
-            # 不是自动 → 点菜单 + 等展开 + 点自动
-            self.round_by_ocr_and_click(self.last_screenshot, '菜单', area=area, success_wait=1)
-            result = self.round_by_find_and_click_area(self.screenshot(), '委托助手', '按钮-自动')
+            # 文本-剧情左上角，显示'菜单'
+            result = self.round_by_find_and_click_area(self.last_screenshot, '委托助手', '按钮-自动')
             if result.is_success:
-                return self.round_wait('尝试切换到自动模式')
+                return self.round_wait('尝试切换到自动模式', wait=1)
+            # 展开菜单后，点击在文本-剧情左上角下方的'自动'
+            result = self.round_by_ocr_and_click(self.last_screenshot, '菜单', area=area)
+            if result.is_success:
+                return self.round_wait('尝试展开剧情菜单', wait=1)
 
         # 跳过剧情模式
         if self.config.story_mode == StoryMode.SKIP.value.value:
-            self.round_by_ocr_and_click_by_priority(['跳过', '菜单', '自动'], area=area, success_wait=1)
-            result = self.round_by_find_and_click_area(self.screenshot(), '委托助手', '对话框确认', crop_first=False)
+            # 优先识别并点击对话框'确认'
+            result = self.round_by_find_and_click_area(self.last_screenshot, '委托助手', '对话框确认', crop_first=False)
             if result.is_success:
-                return self.round_wait('跳过剧情')
+                return self.round_wait('确认跳过剧情', wait=1)
+            # 按 '跳过' -> '菜单' -> '自动' 的优先级点击
+            result = self.round_by_ocr_and_click_by_priority(['跳过', '菜单', '自动'], area=area)
+            if result.is_success:
+                return self.round_wait(f'点击剧情按钮 {result.status}', wait=1)
 
         # 自动点击模式
         # 文本-剧情右上角某些情况下是没有内容可点击的
