@@ -74,9 +74,6 @@ try:
             self._check_version_runner = CheckVersionRunner(self.ctx)
             self._check_version_runner.get.connect(self._update_version)
 
-            # 立即检查并应用已有的主题色，避免navbar颜色闪烁
-            self._apply_initial_theme_color()
-
             # 延迟发送应用启动事件，等待窗口完全显示
             self._launch_timer = QTimer()
             self._launch_timer.setSingleShot(True)
@@ -136,6 +133,11 @@ try:
             # 游戏助手
             from zzz_od.gui.view.game_assistant.game_assistant_interface import GameAssistantInterface
             self.add_sub_interface(GameAssistantInterface(self.ctx, parent=self))
+
+            # 画中画
+            from one_dragon_qt.widgets.pip_button import PipButton
+            self.pip_btn = PipButton(self.ctx, parent=self)
+            self.add_nav_widget(self.pip_btn)
 
             # 点赞
             from one_dragon_qt.view.like_interface import LikeInterface
@@ -241,13 +243,6 @@ try:
                 if dialog.exec():
                     self.ctx.env_config.is_first_run = False
 
-        def _apply_initial_theme_color(self):
-            """立即应用已有的主题色，避免navbar颜色闪烁"""
-            # 从配置文件加载主题色到theme_manager
-            from one_dragon_qt.services.theme_manager import ThemeManager
-            ThemeManager.load_from_config(self.ctx)
-            self.navigationInterface.update_all_buttons_theme_color(ThemeManager.get_current_color())
-
         def _after_app_launch(self):
             """异步处理应用启动后需要处理的事情"""
             self._check_version_runner.start()
@@ -288,6 +283,9 @@ try:
 
         def closeEvent(self, event):
             """窗口关闭事件"""
+            if hasattr(self, 'pip_btn') and self.pip_btn:
+                self.pip_btn.dispose()
+
             if hasattr(self.ctx, 'telemetry') and self.ctx.telemetry:
                 import time
                 session_duration = time.time() - self._app_start_time
