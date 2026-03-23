@@ -19,10 +19,10 @@ area_list:
 - area_name: 剩余次数
   id_mark: false
   pc_rect:
-  - 384
-  - 996
-  - 406
-  - 1025
+  - 1516
+  - 1018
+  - 1538
+  - 1043
   text: ''
   lcs_percent: 0.5
   template_sub_dir: ''
