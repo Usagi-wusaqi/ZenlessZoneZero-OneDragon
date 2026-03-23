@@ -206,18 +206,14 @@ class CompendiumService:
 
         category_list = self.get_category_list_data('训练')
         for category_item in category_list:
+            label = category_item.category_name
+            if category_item.category_name == '恶名狩猎':
+                # 普通恶名狩猎走独立 app，体力计划里只保留深度追猎入口。
+                label = f'{category_item.category_name} 深度追猎'
             category_config_list.append(ConfigItem(
-                label=category_item.category_name,
+                label=label,
                 value=category_item.category_name
             ))
-
-        category_list = self.get_category_list_data('训练')
-        for category_item in category_list:
-            if category_item.category_name == '恶名狩猎':
-                category_config_list.append(ConfigItem(
-                    label=f'{category_item.category_name} 深度追猎',
-                    value=category_item.category_name
-                ))
 
         return category_config_list
 
