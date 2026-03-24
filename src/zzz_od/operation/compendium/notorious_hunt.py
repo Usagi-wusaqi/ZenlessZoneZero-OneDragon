@@ -10,6 +10,7 @@ from one_dragon.base.operation.operation_notify import NotifyTiming, node_notify
 from one_dragon.base.operation.operation_round_result import OperationRoundResult
 from one_dragon.utils import cv2_utils, str_utils
 from one_dragon.utils.i18_utils import gt
+from one_dragon.utils.log_utils import log
 from zzz_od.application.charge_plan import charge_plan_const
 from zzz_od.application.charge_plan.charge_plan_config import (
     ChargePlanConfig,
@@ -203,6 +204,8 @@ class NotoriousHunt(ZOperation):
                 self.can_run_times = self.run_record.left_times
             else:
                 self.can_run_times = left_times
+
+            log.info('恶名狩猎剩余奖励次数 %s', self.can_run_times)
 
             # 运行次数上限是计划剩余次数
             need_run_times = self.plan.plan_times - self.plan.run_times
