@@ -168,45 +168,22 @@ class NotoriousHunt(ZOperation):
 
     @node_from(from_name='判断副本名称')  # 当前副本符合 继续选择
     @node_from(from_name='选择副本')
-    @operation_node(name='抉择深度追猎')
-    def decide_by_use_power(self):
-        # 恶名狩猎 app: 不用消耗体力（每周刷新三次免费的剩余奖励次数）
-        # 存在深度追猎 ON 或无报酬模式，说明剩余奖励次数已用尽，立即跳过
-        if not self.use_charge_power:
-            result = self.round_by_find_area(self.last_screenshot, '恶名狩猎', '按钮-深度追猎-ON')
-            if result.is_success:
-                self.run_record.left_times = 0
-                return self.round_success(NotoriousHunt.STATUS_NO_LEFT_TIMES)
-            result = self.round_by_find_area(self.last_screenshot, '恶名狩猎', '按钮-无报酬模式')
-            if result.is_success:
-                self.run_record.left_times = 0
-                return self.round_success(NotoriousHunt.STATUS_NO_LEFT_TIMES)
-            return self.round_success(NotoriousHunt.STATUS_WITH_LEFT_TIMES)
+    @operation_node(name='抉择恶名狩猎', node_max_retry_times=10)
+    def decide_notorious_hunt(self):
+        if self.use_charge_power:
+            return self.round_success('深度追猎')
 
-        # 恶名狩猎 深度追猎: 需要消耗体力（入口要在剩余奖励次数用完才会开启）
-        # 没有深度追猎入口，说明剩余奖励次数未用尽，立即跳过
-        result = self.round_by_find_area(self.last_screenshot, '恶名狩猎', '深度追猎-!')
-        if not result.is_success:
-            return self.round_success(NotoriousHunt.STATUS_NO_LEFT_TIMES)
-        #
+        # 恶名狩猎 app: 不用消耗体力(每周刷新三次免费的剩余奖励次数)
+        # 存在"深度追猎-ON"或'无报酬模式', 则没有剩余奖励次数, 标记完成
+        # "剩余次数"可以读取, 通过识别结果决定具体运行几次
         result = self.round_by_find_area(self.last_screenshot, '恶名狩猎', '按钮-深度追猎-ON')
         if result.is_success:
-            return self.round_success(NotoriousHunt.STATUS_WITH_LEFT_TIMES)
-        # 选择深度追猎之后的对话框
-        result = self.round_by_find_and_click_area(self.last_screenshot, '恶名狩猎', '按钮-深度追猎-确认')
+            self.run_record.left_times = 0
+            return self.round_success(NotoriousHunt.STATUS_NO_LEFT_TIMES)
+        result = self.round_by_find_area(self.last_screenshot, '恶名狩猎', '按钮-无报酬模式')
         if result.is_success:
-            return self.round_wait(result.status, wait=1)
-        # 尝试点亮 ON 开启深度追猎
-        self.round_by_click_area('恶名狩猎', '按钮-深度追猎-ON')
-        return self.round_retry(wait=1)
-
-    @node_from(from_name='抉择深度追猎', status=STATUS_WITH_LEFT_TIMES)
-    @operation_node(name='识别可运行次数')
-    def check_can_run_times(self) -> OperationRoundResult:
-        # 恶名狩猎 深度追猎：'剩余奖励次数'无法读取，因为对应区域文字被替换成'电量消耗'
-        if self.use_charge_power:  # 深度追猎
-            return self.round_success(NotoriousHunt.STATUS_WITH_LEFT_TIMES)
-        # 恶名狩猎 app：'剩余奖励次数'可以读取，通过识别结果决定具体运行几次
+            self.run_record.left_times = 0
+            return self.round_success(NotoriousHunt.STATUS_NO_LEFT_TIMES)
         else:
             area = self.ctx.screen_loader.get_area('恶名狩猎', '剩余次数')
             part = cv2_utils.crop_image_only(self.last_screenshot, area.rect)
@@ -214,6 +191,8 @@ class NotoriousHunt(ZOperation):
             ocr_result = self.ctx.ocr.run_ocr_single_line(part)
             left_times = str_utils.get_positive_digits(ocr_result, None)
             if left_times is None:  # 识别不到时 使用记录中的数量
+                if self.node_retry_times < self.node_max_retry_times:
+                    return self.round_retry('未识别到剩余次数', wait=0.5)
                 self.can_run_times = self.run_record.left_times
             else:
                 self.can_run_times = left_times
@@ -227,7 +206,29 @@ class NotoriousHunt(ZOperation):
 
             return self.round_success(NotoriousHunt.STATUS_WITH_LEFT_TIMES)
 
-    @node_from(from_name='识别可运行次数', status=STATUS_WITH_LEFT_TIMES)
+    @node_from(from_name='抉择恶名狩猎', status='深度追猎')
+    @operation_node(name='抉择深度追猎')
+    def decide_by_use_power(self):
+        # 恶名狩猎 深度追猎: 需要消耗体力(入口要在剩余奖励次数用完才会开启)
+        # 没有"深度追猎-!", 则还有剩余奖励次数, 立即跳过
+        # 区域对应文本"剩余奖励次数"变成"电量消耗", 导致"剩余次数"无法读取
+        result = self.round_by_find_area(self.last_screenshot, '恶名狩猎', '深度追猎-!')
+        if not result.is_success:
+            return self.round_success(NotoriousHunt.STATUS_NO_LEFT_TIMES)
+        # "深度追猎-ON"已点亮后便可以深度追猎
+        result = self.round_by_find_area(self.last_screenshot, '恶名狩猎', '按钮-深度追猎-ON')
+        if result.is_success:
+            return self.round_success(NotoriousHunt.STATUS_WITH_LEFT_TIMES)
+        # 尝试点亮"深度追猎-ON"之后的对话框
+        result = self.round_by_find_and_click_area(self.last_screenshot, '恶名狩猎', '按钮-深度追猎-确认')
+        if result.is_success:
+            return self.round_wait(result.status, wait=1)
+        # 尝试点亮"深度追猎-ON"以开启深度追猎
+        self.round_by_click_area('恶名狩猎', '按钮-深度追猎-ON')
+        return self.round_retry(wait=1)
+
+    @node_from(from_name='抉择恶名狩猎', status=STATUS_WITH_LEFT_TIMES)
+    @node_from(from_name='抉择深度追猎', status=STATUS_WITH_LEFT_TIMES)
     @operation_node(name='选择难度')
     def choose_level(self) -> OperationRoundResult:
         if self.plan.level == NotoriousHuntLevelEnum.DEFAULT.value.value:
