@@ -174,13 +174,9 @@ class NotoriousHunt(ZOperation):
             return self.round_success('深度追猎')
 
         # 恶名狩猎 app: 不用消耗体力(每周刷新三次免费的剩余奖励次数)
-        # 存在"深度追猎-ON"或'无报酬模式', 则没有剩余奖励次数, 标记完成
+        # 存在"深度追猎-!", 则没有剩余奖励次数, 标记完成
         # "剩余次数"可以读取, 通过识别结果决定具体运行几次
-        result = self.round_by_find_area(self.last_screenshot, '恶名狩猎', '按钮-深度追猎-ON')
-        if result.is_success:
-            self.run_record.left_times = 0
-            return self.round_success(NotoriousHunt.STATUS_NO_LEFT_TIMES)
-        result = self.round_by_find_area(self.last_screenshot, '恶名狩猎', '按钮-无报酬模式')
+        result = self.round_by_find_area(self.last_screenshot, '恶名狩猎', '深度追猎-!')
         if result.is_success:
             self.run_record.left_times = 0
             return self.round_success(NotoriousHunt.STATUS_NO_LEFT_TIMES)
