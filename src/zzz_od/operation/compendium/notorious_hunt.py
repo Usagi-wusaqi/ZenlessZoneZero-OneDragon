@@ -169,7 +169,7 @@ class NotoriousHunt(ZOperation):
     @node_from(from_name='判断副本名称')  # 当前副本符合 继续选择
     @node_from(from_name='选择副本')
     @operation_node(name='抉择恶名狩猎', node_max_retry_times=10)
-    def decide_notorious_hunt(self):
+    def decide_notorious_hunt(self) -> OperationRoundResult:
         if self.use_charge_power:
             return self.round_success('深度追猎')
 
@@ -204,7 +204,7 @@ class NotoriousHunt(ZOperation):
 
     @node_from(from_name='抉择恶名狩猎', status='深度追猎')
     @operation_node(name='抉择深度追猎')
-    def decide_by_use_power(self):
+    def decide_by_use_power(self) -> OperationRoundResult:
         # 恶名狩猎 深度追猎: 需要消耗体力(入口要在剩余奖励次数用完才会开启)
         # 没有"深度追猎-!", 则还有剩余奖励次数, 立即跳过
         # 区域对应文本"剩余奖励次数"变成"电量消耗", 导致"剩余次数"无法读取
@@ -453,19 +453,16 @@ class NotoriousHunt(ZOperation):
 
 
 def __debug_charge():
-    """
-    测试电量识别
-    @return:
-    """
+    """测试剩余次数识别。"""
     ctx = ZContext()
-    ctx.init_by_config()
-    ctx.init_ocr()
+    ctx.init()
     from one_dragon.utils import debug_utils
-    screen = debug_utils.get_debug_image('_1742622386361')
-    area = ctx.screen_loader.get_area('恶名狩猎', '文本-剩余电量')
+    screen = debug_utils.get_debug_image('_1774444468708')
+    area = ctx.screen_loader.get_area('恶名狩猎', '剩余次数')
     part = cv2_utils.crop_image_only(screen, area.rect)
     ocr_result = ctx.ocr.run_ocr_single_line(part)
-    print(ocr_result)
+    left_times = str_utils.get_positive_digits(ocr_result, None)
+    print(left_times)
 
 
 def __debug():
