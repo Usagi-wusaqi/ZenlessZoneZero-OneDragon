@@ -219,7 +219,10 @@ class NotoriousHunt(ZOperation):
             result = self.round_by_find_area(self.last_screenshot, '恶名狩猎', '按钮-深度追猎-ON')
             if result.is_success:
                 return self.round_success(NotoriousHunt.STATUS_WITH_LEFT_TIMES)
-            self.round_by_click_area('恶名狩猎', '按钮-深度追猎-ON')
+            result = self.round_by_find_area(self.last_screenshot, '恶名狩猎', '按钮-无报酬模式')
+            if result.is_success:
+                self.round_by_click_area('恶名狩猎', '按钮-深度追猎-ON')
+                return self.round_wait(wait=1)
             return self.round_retry(wait=1)
 
         return self.round_success(NotoriousHunt.STATUS_NO_LEFT_TIMES)
