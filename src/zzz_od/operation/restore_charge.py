@@ -173,7 +173,7 @@ class RestoreCharge(ZOperation):
             return self.round_retry('恢复电量失败', wait=0.5)
 
 
-def __debug_charge():
+def __debug_charge() -> None:
     ctx = ZContext()
     ctx.init()
     ctx.init_ocr()
@@ -188,7 +188,7 @@ def __debug_charge():
     cv2_utils.show_image(part, wait=0)
     print(ocr_result)
 
-def __debug():
+def __debug() -> None:
     ctx = ZContext()
     ctx.init()
     ctx.init_ocr()
