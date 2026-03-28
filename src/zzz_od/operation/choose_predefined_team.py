@@ -51,7 +51,7 @@ class ChoosePredefinedTeam(ZOperation):
                                                  success_wait=1, retry_wait=1)
 
     @node_from(from_name='点击预备编队')
-    @node_from(from_name='选择编队失败')
+    @node_from(from_name='尝试查找编队')
     @operation_node(name='选择编队', node_max_retry_times=0)
     def choose_team(self) -> OperationRoundResult:
         area = self.ctx.screen_loader.get_area('实战模拟室', '预备出战')
@@ -87,8 +87,8 @@ class ChoosePredefinedTeam(ZOperation):
         return self.round_wait(wait=1)
 
     @node_from(from_name='选择编队', success=False)
-    @operation_node(name='选择编队失败')
-    def choose_team_fail(self) -> OperationRoundResult:
+    @operation_node(name='尝试查找编队')
+    def try_find_team(self) -> OperationRoundResult:
         self.scroll_page_count += 1
         if self.scroll_page_count > self.max_scroll_page_count:
             return self.round_fail('选择配队失败')
