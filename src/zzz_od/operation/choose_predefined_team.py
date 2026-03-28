@@ -100,7 +100,7 @@ class ChoosePredefinedTeam(ZOperation):
 
 def __debug():
     ctx = ZContext()
-    ctx.init_by_config()
+    ctx.init()
     ctx.init_ocr()
 
     from one_dragon.utils import debug_utils
