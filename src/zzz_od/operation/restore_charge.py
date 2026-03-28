@@ -95,8 +95,6 @@ class RestoreCharge(ZOperation):
         if not self.is_menu:
             return self.round_success(wait=0.5)
 
-        current_amount = None
-
         amount_area = self.ctx.screen_loader.get_area('恢复电量', '当前数量')
         part = cv2_utils.crop_image_only(self.last_screenshot, amount_area.rect)
         ocr_result = self.ctx.ocr.run_ocr_single_line(part)
@@ -104,14 +102,24 @@ class RestoreCharge(ZOperation):
 
         if current_amount is None:
             return self.round_retry('未识别到电量数值', wait=0.5)
-        else:
-            return self.round_success(status=self.previous_node.status, data=current_amount, wait=0.5)
+
+        # 储蓄电量不足时直接失败
+        if (self.required_charge is not None
+                and self.previous_node.status == self.SOURCE_BACKUP_CHARGE
+                and self.required_charge > current_amount):
+            return self.round_fail('储蓄电量不足', data=current_amount)
+
+        return self.round_success(status=self.previous_node.status, data=current_amount, wait=0.5)
 
     @node_from(from_name='识别当前数量', status=SOURCE_BACKUP_CHARGE)
     @operation_node(name='处理储蓄电量恢复')
     def handle_backup_charge(self) -> OperationRoundResult:
         if self.required_charge is None:
             return self.round_success()
+
+        # 防御性检查：如果电量不足，应该失败
+        if self.required_charge > self.previous_node.data:
+            return self.round_fail('储蓄电量不足', data=self.previous_node.data)
 
         # 点击输入框并输入数量
         amount_to_use = min(self.required_charge, self.previous_node.data)
