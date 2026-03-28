@@ -85,7 +85,7 @@ class RestoreCharge(ZOperation):
     @operation_node(name='确认电量来源')
     def confirm_charge_source(self) -> OperationRoundResult:
         confirm_area = self.ctx.screen_loader.get_area('恢复电量', '确认')
-        click = self.round_by_ocr_and_click(self.last_screenshot, '确认', confirm_area)
+        click = self.round_by_ocr_and_click(self.last_screenshot, gt('确认', 'game'), confirm_area)
         if click.is_success:
             return self.round_success(status=self.previous_node.status, wait=0.5)
 
@@ -112,6 +112,12 @@ class RestoreCharge(ZOperation):
             return self.round_fail(f'储蓄电量不足。需要：{self.required_charge}，目前：{current_amount}', wait=0.5)
 
         return self.round_success(status=self.previous_node.status, data=current_amount, wait=0.5)
+
+    @node_from(from_name='识别当前数量', success=False)
+    @operation_node(name='电量恢复失败')
+    def restore_charge_failed(self) -> OperationRoundResult:
+        """电量恢复失败的处理节点"""
+        return self.round_fail(self.previous_node.status)
 
     @node_from(from_name='识别当前数量', status=SOURCE_BACKUP_CHARGE)
     @operation_node(name='处理储蓄电量恢复')
