@@ -118,8 +118,6 @@ class RestoreCharge(ZOperation):
         if (self.required_charge is not None
             and self.previous_node.status == self.SOURCE_BACKUP_CHARGE
             and self.required_charge > current_amount):
-            if self.is_menu:
-                return self.round_fail(f'储蓄电量不足。需要：{self.required_charge}，目前：{current_amount}', wait=0.5)
             if self.config.restore_charge == RestoreChargeEnum.BOTH.value.value:
                 self.skip_backup_charge = True
                 return self.round_success(status=self.STATUS_RESELECT_SOURCE, data=current_amount, wait=0.5)
@@ -132,6 +130,23 @@ class RestoreCharge(ZOperation):
     def restore_charge_failed(self) -> OperationRoundResult:
         """电量恢复失败的处理节点"""
         return self.round_fail(self.previous_node.status)
+
+    @node_from(from_name='识别当前数量', status=STATUS_SKIP_BACKUP_CHARGE)
+    @operation_node(name='关闭恢复弹窗')
+    def close_restore_popup(self) -> OperationRoundResult:
+        result = self.round_by_find_area(self.last_screenshot, '恢复电量', '标题')
+        if not result.is_success:
+            return self.round_success(status=self.STATUS_SKIP_BACKUP_CHARGE, wait=0.5)
+
+        click_result = self.round_by_click_area('菜单', '返回', success_wait=0.5)
+        if click_result.is_success:
+            return self.round_retry('尝试关闭恢复弹窗', wait=0.5)
+
+        click_result = self.round_by_click_area('菜单', '关闭', success_wait=0.5)
+        if click_result.is_success:
+            return self.round_retry('尝试关闭恢复弹窗', wait=0.5)
+
+        return self.round_retry('未关闭恢复弹窗', wait=0.5)
 
     @node_from(from_name='识别当前数量', status=SOURCE_BACKUP_CHARGE)
     @operation_node(name='处理储蓄电量恢复')
