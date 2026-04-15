@@ -52,6 +52,9 @@ class RestoreCharge(ZOperation):
         self.is_menu = is_menu
         self.skip_backup_charge: bool = False
 
+    def _should_adjust_restore_amount(self) -> bool:
+        return self.required_charge is not None and self.is_menu
+
     def _get_target_source_list(self) -> list[str]:
         if self.config.restore_charge == RestoreChargeEnum.BACKUP_ONLY.value.value:
             return [self.SOURCE_BACKUP_CHARGE]
@@ -151,7 +154,7 @@ class RestoreCharge(ZOperation):
     @node_from(from_name='识别当前数量', status=SOURCE_BACKUP_CHARGE)
     @operation_node(name='处理储蓄电量恢复')
     def handle_backup_charge(self) -> OperationRoundResult:
-        if self.required_charge is None or not self.is_menu:
+        if not self._should_adjust_restore_amount():
             return self.round_success()
 
         # 点击输入框并输入数量
@@ -166,7 +169,7 @@ class RestoreCharge(ZOperation):
     @node_from(from_name='识别当前数量', status=SOURCE_ETHER_BATTERY)
     @operation_node(name='处理以太电池恢复')
     def handle_ether_battery(self) -> OperationRoundResult:
-        if self.required_charge is None or not self.is_menu:
+        if not self._should_adjust_restore_amount():
             return self.round_success()
 
         # 每个电池恢复60体力

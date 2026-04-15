@@ -8,7 +8,6 @@ from one_dragon.base.operation.operation_round_result import OperationRoundResul
 from one_dragon.utils import cv2_utils, str_utils
 from zzz_od.application.charge_plan import charge_plan_const
 from zzz_od.application.charge_plan.charge_plan_config import (
-    CardNumEnum,
     ChargePlanConfig,
     ChargePlanItem,
 )
@@ -110,18 +109,7 @@ class ChargePlanApp(ZApplication):
                 return self.round_fail(ChargePlanApp.STATUS_NO_PLAN)
 
             # 计算所需电量
-            need_charge_power = 0  # 未知类型,在副本内检查
-            if candidate_plan.category_name == '实战模拟室':
-                if candidate_plan.card_num == CardNumEnum.DEFAULT.value.value:
-                    need_charge_power = 20  # 至少需要20体力
-                else:
-                    need_charge_power = int(candidate_plan.card_num) * 20
-            elif candidate_plan.category_name == '区域巡防':
-                need_charge_power = 60
-            elif candidate_plan.category_name == '专业挑战室':
-                need_charge_power = 40
-            elif candidate_plan.category_name == '恶名狩猎':
-                need_charge_power = 60
+            need_charge_power = candidate_plan.estimated_charge_power
 
             # 检查电量是否足够
             if need_charge_power > 0 and self.charge_power < need_charge_power:

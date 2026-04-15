@@ -196,7 +196,7 @@ class AreaPatrol(ZOperation):
         op = ChooseNextOrFinishAfterBattle(
             self.ctx,
             self.plan.plan_times > self.plan.run_times,
-            required_charge=60,
+            required_charge=self.plan.estimated_charge_power,
         )
         return self.round_by_op_result(op.execute())
 

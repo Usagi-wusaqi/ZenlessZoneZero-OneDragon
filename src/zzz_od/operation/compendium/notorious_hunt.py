@@ -424,7 +424,7 @@ class NotoriousHunt(ZOperation):
     def check_next(self) -> OperationRoundResult:
         if self.use_charge_power:
             try_next = self.plan.plan_times > self.plan.run_times
-            required_charge = 60
+            required_charge = self.plan.estimated_charge_power
         else:
             try_next = self.can_run_times > 0
             required_charge = None
