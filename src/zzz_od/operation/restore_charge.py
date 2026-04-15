@@ -20,12 +20,14 @@ from zzz_od.operation.zzz_operation import ZOperation
 class RestoreCharge(ZOperation):
     """
     电量恢复操作类
-    负责在菜单界面恢复电量，支持储蓄电量和以太电池两种恢复方式
+    负责处理菜单态和副本内的恢复电量弹窗，支持储蓄电量和以太电池两种恢复方式
+    菜单态只预读来源数量并判断是否值得进本，真正的恢复数量确认留到副本内执行
     """
 
     SOURCE_BACKUP_CHARGE: ClassVar[str] = '储蓄电量'
     SOURCE_ETHER_BATTERY: ClassVar[str] = '以太电池'
     STATUS_SKIP_RESTORE_CHARGE: ClassVar[str] = '跳过恢复电量'
+    STATUS_CONTINUE_TO_MISSION: ClassVar[str] = '继续前往副本'
     STATUS_RESELECT_SOURCE: ClassVar[str] = '重新选择电量来源'
 
     def __init__(self, ctx: ZContext, required_charge: int | None = None, is_menu: bool = False):
@@ -54,6 +56,12 @@ class RestoreCharge(ZOperation):
 
     def _should_adjust_restore_amount(self) -> bool:
         return self.required_charge is not None and self.is_menu
+
+    def _should_probe_source_in_menu(self) -> bool:
+        return self.is_menu and self.required_charge is not None
+
+    def _should_check_quick_use_in_menu(self) -> bool:
+        return self._should_probe_source_in_menu()
 
     def _is_source_charge_enough(self, source: str, current_amount: int) -> bool:
         if self.required_charge is None:
@@ -96,6 +104,7 @@ class RestoreCharge(ZOperation):
 
     @node_from(from_name='打开恢复界面')
     @node_from(from_name='识别当前数量', status=STATUS_RESELECT_SOURCE)
+    @node_from(from_name='关闭快捷使用', status=STATUS_RESELECT_SOURCE)
     @operation_node(name='选择电量来源')
     def select_charge_source(self) -> OperationRoundResult:
         target_list = self._get_target_source_list()
@@ -125,6 +134,12 @@ class RestoreCharge(ZOperation):
     @node_from(from_name='确认电量来源')
     @operation_node(name='识别当前数量')
     def set_charge_amount(self) -> OperationRoundResult:
+        source = self.previous_node.status
+        if self._should_check_quick_use_in_menu():
+            quick_use_result = self.round_by_find_area(self.last_screenshot, '恢复电量', '快捷使用')
+            if not quick_use_result.is_success:
+                return self.round_retry('未识别到快捷使用', wait=0.5)
+
         amount_area = self.ctx.screen_loader.get_area('恢复电量', '当前数量')
         part = cv2_utils.crop_image_only(self.last_screenshot, amount_area.rect)
         ocr_result = self.ctx.ocr.run_ocr_single_line(part)
@@ -133,8 +148,22 @@ class RestoreCharge(ZOperation):
         if current_amount is None:
             return self.round_retry('未识别到电量数值', wait=0.5)
 
-        # 储蓄电量不足时，不再提取无效数量
-        source = self.previous_node.status
+        if self._should_probe_source_in_menu():
+            # 菜单态这里只预读可用恢复量，真正的提取留到副本里点“下一步”后再确认
+            # 储蓄电量和以太电池都会先进入“快捷使用”，再读取对应来源的当前数量
+            if self._is_source_charge_enough(source, current_amount):
+                return self.round_success(
+                    status=self.STATUS_CONTINUE_TO_MISSION,
+                    data=current_amount,
+                    wait=0.5,
+                )
+            return self.round_success(
+                status=self._get_insufficient_source_status(source),
+                data=current_amount,
+                wait=0.5,
+            )
+
+        # 储蓄电量或以太电池不足以启动当前计划时，不再确认这次无效恢复
         if not self._is_source_charge_enough(source, current_amount):
             return self.round_success(
                 status=self._get_insufficient_source_status(source),
@@ -150,12 +179,29 @@ class RestoreCharge(ZOperation):
         """电量恢复失败的处理节点"""
         return self.round_fail(self.previous_node.status)
 
+    @node_from(from_name='识别当前数量', status=STATUS_CONTINUE_TO_MISSION)
+    @node_from(from_name='识别当前数量', status=STATUS_RESELECT_SOURCE)
     @node_from(from_name='识别当前数量', status=STATUS_SKIP_RESTORE_CHARGE)
+    @operation_node(name='关闭快捷使用')
+    def close_quick_use_popup(self) -> OperationRoundResult:
+        # 菜单态预读来源数量后，若停留在“快捷使用”弹层，先把它关掉，再按原状态继续后续流程
+        quick_use_result = self.round_by_find_area(self.last_screenshot, '恢复电量', '快捷使用')
+        if not quick_use_result.is_success:
+            return self.round_success(status=self.previous_node.status, wait=0.5)
+
+        click_result = self.round_by_click_area('菜单', '关闭', success_wait=0.5)
+        if click_result.is_success:
+            return self.round_retry('尝试关闭快捷使用', wait=0.5)
+
+        return self.round_retry('未关闭快捷使用', wait=0.5)
+
+    @node_from(from_name='关闭快捷使用', status=STATUS_CONTINUE_TO_MISSION)
+    @node_from(from_name='关闭快捷使用', status=STATUS_SKIP_RESTORE_CHARGE)
     @operation_node(name='关闭恢复弹窗')
     def close_restore_popup(self) -> OperationRoundResult:
         result = self.round_by_find_area(self.last_screenshot, '恢复电量', '标题')
         if not result.is_success:
-            return self.round_success(status=self.STATUS_SKIP_RESTORE_CHARGE, wait=0.5)
+            return self.round_success(status=self.previous_node.status, wait=0.5)
 
         click_result = self.round_by_click_area('菜单', '返回', success_wait=0.5)
         if click_result.is_success:
@@ -170,6 +216,8 @@ class RestoreCharge(ZOperation):
     @node_from(from_name='识别当前数量', status=SOURCE_BACKUP_CHARGE)
     @operation_node(name='处理储蓄电量恢复')
     def handle_backup_charge(self) -> OperationRoundResult:
+        # 只有真正进入来源处理流程时，才会在菜单态手动输入恢复数量
+        # 当前的菜单态预读分支会在识别数量后提前返回，不会走到这里
         if not self._should_adjust_restore_amount():
             return self.round_success()
 
@@ -185,6 +233,8 @@ class RestoreCharge(ZOperation):
     @node_from(from_name='识别当前数量', status=SOURCE_ETHER_BATTERY)
     @operation_node(name='处理以太电池恢复')
     def handle_ether_battery(self) -> OperationRoundResult:
+        # 只有真正进入来源处理流程时，才会在菜单态手动调整电池数量
+        # 当前的菜单态预读分支会在识别数量后提前返回，不会走到这里
         if not self._should_adjust_restore_amount():
             return self.round_success()
 

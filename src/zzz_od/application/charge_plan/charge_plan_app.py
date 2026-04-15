@@ -108,7 +108,7 @@ class ChargePlanApp(ZApplication):
             if candidate_plan is None:
                 return self.round_fail(ChargePlanApp.STATUS_NO_PLAN)
 
-            # 计算所需电量
+            # 计算当前计划预估所需电量；未知类型会返回0，交给副本内流程继续判断
             need_charge_power = candidate_plan.estimated_charge_power
 
             # 检查电量是否足够
@@ -134,6 +134,7 @@ class ChargePlanApp(ZApplication):
             return self.round_success()
 
     @node_from(from_name='查找并选择下一个可执行任务')
+    @node_from(from_name='恢复电量', status=RestoreCharge.STATUS_CONTINUE_TO_MISSION)
     @operation_node(name='传送')
     def transport(self) -> OperationRoundResult:
         # 使用已经在查找并选择下一个可执行任务节点中设置好的self.current_plan
