@@ -1,4 +1,3 @@
-import time
 from typing import ClassVar
 
 from one_dragon.base.geometry.point import Point
@@ -184,50 +183,10 @@ class RestoreCharge(ZOperation):
 
         return self.round_retry('未关闭快捷使用', wait=0.5)
 
-    @node_from(from_name='识别当前数量', status=SOURCE_BACKUP_CHARGE)
-    @operation_node(name='处理储蓄电量恢复')
-    def handle_backup_charge(self) -> OperationRoundResult:
-        # 只有真正进入来源处理流程时，才会在菜单态手动输入恢复数量
-        # 当前的菜单态预读分支会在识别数量后提前返回，不会走到这里
-        if not self._should_probe_source_in_menu():
-            return self.round_success()
-
-        # 点击输入框并输入数量
-        amount_to_use = min(self.required_charge, self.previous_node.data)
-        input_area = self.ctx.screen_loader.get_area('恢复电量', '兑换数量-数字输入框')
-        self.ctx.controller.click(input_area.center)
-        time.sleep(0.5)
-        self.ctx.controller.input_str(str(amount_to_use))
-
-        return self.round_success(wait=0.5)
-
-    @node_from(from_name='识别当前数量', status=SOURCE_ETHER_BATTERY)
-    @operation_node(name='处理以太电池恢复')
-    def handle_ether_battery(self) -> OperationRoundResult:
-        # 只有真正进入来源处理流程时，才会在菜单态手动调整电池数量
-        # 当前的菜单态预读分支会在识别数量后提前返回，不会走到这里
-        if not self._should_probe_source_in_menu():
-            return self.round_success()
-
-        # 每个电池恢复60体力
-        need_battery_count = (self.required_charge + 59) // 60
-        usable_battery_count = min(need_battery_count, self.previous_node.data)
-
-        # 获取加号位置
-        plus_point = self.ctx.screen_loader.get_area('恢复电量', '兑换数量-加').center
-
-        # 默认初始数量为1，所以只需点击battery_count-1次
-        for _ in range(usable_battery_count - 1):
-            self.ctx.controller.click(plus_point)
-            time.sleep(0.2)
-
-        return self.round_success(wait=0.5)
-
-    @node_from(from_name='处理储蓄电量恢复')
-    @node_from(from_name='处理以太电池恢复')
     @node_from(from_name='识别当前数量')
     @operation_node(name='确认恢复电量')
     def confirm_restore_charge(self) -> OperationRoundResult:
+        # 菜单态预读会被前面的专用状态边拦走；走到这里说明当前弹窗可以直接确认
         confirm_area = self.ctx.screen_loader.get_area('恢复电量', '确认')
         return self.round_by_ocr_and_click(self.last_screenshot, gt('确认', 'game'), confirm_area, success_wait=1)
 
