@@ -40,10 +40,7 @@ class AreaPatrol(ZOperation):
         """
         ZOperation.__init__(
             self, ctx,
-            op_name='{} {}'.format(
-                gt('区域巡防', 'game'),
-                gt(plan.mission_type_name, 'game')
-            )
+            op_name=f"{gt('区域巡防', 'game')} {gt(plan.mission_type_name, 'game')}"
         )
         self.config: ChargePlanConfig = self.ctx.run_context.get_config(
             app_id=charge_plan_const.APP_ID,

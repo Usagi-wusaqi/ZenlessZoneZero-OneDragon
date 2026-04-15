@@ -12,7 +12,7 @@ from zzz_od.operation.zzz_operation import ZOperation
 
 class ChooseNextOrFinishAfterBattle(ZOperation):
 
-    def __init__(self, ctx: ZContext, try_next: bool, required_charge: int | None = None):
+    def __init__(self, ctx: ZContext, try_next: bool, required_charge: int | None = None) -> None:
         """
         在战斗结束画面 尝试点击 【再来一次】 或者 【结束】
         :param ctx: 上下文
