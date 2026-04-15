@@ -12,14 +12,16 @@ from zzz_od.operation.zzz_operation import ZOperation
 
 class ChooseNextOrFinishAfterBattle(ZOperation):
 
-    def __init__(self, ctx: ZContext, try_next: bool):
+    def __init__(self, ctx: ZContext, try_next: bool, required_charge: int | None = None):
         """
         在战斗结束画面 尝试点击 【再来一次】 或者 【结束】
         :param ctx: 上下文
         :param try_next: 是否尝试点击下一次
+        :param required_charge: 再来一次需要的电量
         """
         ZOperation.__init__(self, ctx, op_name=gt('战斗后选择'))
         self.try_next: bool = try_next
+        self.required_charge: int | None = required_charge
 
     @node_from(from_name='恢复电量', status='战斗结果-完成')
     @operation_node(name='判断再来一次', is_start_node=True)
@@ -49,9 +51,9 @@ class ChooseNextOrFinishAfterBattle(ZOperation):
         )
 
         if config.is_restore_charge_enabled:
-            op = RestoreCharge(self.ctx)
+            op = RestoreCharge(self.ctx, required_charge=self.required_charge, is_menu=False)
             result = self.round_by_op_result(op.execute())
-            self.try_next = result.is_success
+            self.try_next = result.status == '恢复电量成功'
         else:
             self.try_next = False
 

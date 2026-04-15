@@ -3,10 +3,9 @@ from typing import ClassVar
 
 from one_dragon.base.operation.application import application_const
 from one_dragon.base.operation.operation import Operation
-from one_dragon.base.operation.operation_base import OperationResult
 from one_dragon.base.operation.operation_edge import node_from
 from one_dragon.base.operation.operation_node import operation_node
-from one_dragon.base.operation.operation_notify import node_notify, NotifyTiming
+from one_dragon.base.operation.operation_notify import NotifyTiming, node_notify
 from one_dragon.base.operation.operation_round_result import OperationRoundResult
 from one_dragon.utils import cv2_utils
 from one_dragon.utils.i18_utils import gt
@@ -15,8 +14,6 @@ from zzz_od.application.charge_plan.charge_plan_config import (
     ChargePlanConfig,
     ChargePlanItem,
 )
-from zzz_od.auto_battle import auto_battle_utils
-from zzz_od.auto_battle.auto_battle_operator import AutoBattleOperator
 from zzz_od.context.zzz_context import ZContext
 from zzz_od.operation.challenge_mission.check_next_after_battle import (
     ChooseNextOrFinishAfterBattle,
@@ -42,7 +39,7 @@ class ExpertChallenge(ZOperation):
         """
         ZOperation.__init__(
             self, ctx,
-            op_name='%s %s' % (
+            op_name='{} {}'.format(
                 gt('专业挑战室', 'game'),
                 gt(plan.mission_type_name, 'game')
             )
@@ -173,7 +170,11 @@ class ExpertChallenge(ZOperation):
     @node_from(from_name='战斗结束')
     @operation_node(name='判断下一次')
     def check_next(self) -> OperationRoundResult:
-        op = ChooseNextOrFinishAfterBattle(self.ctx, self.plan.plan_times > self.plan.run_times)
+        op = ChooseNextOrFinishAfterBattle(
+            self.ctx,
+            self.plan.plan_times > self.plan.run_times,
+            required_charge=40,
+        )
         return self.round_by_op_result(op.execute())
 
     @node_from(from_name='自动战斗', success=False, status=Operation.STATUS_TIMEOUT)

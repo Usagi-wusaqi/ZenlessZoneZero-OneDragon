@@ -6,7 +6,7 @@ from one_dragon.base.operation.application import application_const
 from one_dragon.base.operation.operation import Operation
 from one_dragon.base.operation.operation_edge import node_from
 from one_dragon.base.operation.operation_node import operation_node
-from one_dragon.base.operation.operation_notify import node_notify, NotifyTiming
+from one_dragon.base.operation.operation_notify import NotifyTiming, node_notify
 from one_dragon.base.operation.operation_round_result import OperationRoundResult
 from one_dragon.utils import cv2_utils, str_utils
 from one_dragon.utils.i18_utils import gt
@@ -21,7 +21,6 @@ from zzz_od.operation.challenge_mission.check_next_after_battle import (
 )
 from zzz_od.operation.challenge_mission.exit_in_battle import ExitInBattle
 from zzz_od.operation.choose_predefined_team import ChoosePredefinedTeam
-# from zzz_od.operation.compendium.coupon import Coupon  # 2.5版本已移除家政券功能，暂时移除导入
 from zzz_od.operation.deploy import Deploy
 from zzz_od.operation.restore_charge import RestoreCharge
 from zzz_od.operation.zzz_operation import ZOperation
@@ -41,7 +40,7 @@ class AreaPatrol(ZOperation):
         """
         ZOperation.__init__(
             self, ctx,
-            op_name='%s %s' % (
+            op_name='{} {}'.format(
                 gt('区域巡防', 'game'),
                 gt(plan.mission_type_name, 'game')
             )
@@ -194,7 +193,11 @@ class AreaPatrol(ZOperation):
     @node_from(from_name='战斗结束')
     @operation_node(name='判断下一次')
     def check_next(self) -> OperationRoundResult:
-        op = ChooseNextOrFinishAfterBattle(self.ctx, self.plan.plan_times > self.plan.run_times)
+        op = ChooseNextOrFinishAfterBattle(
+            self.ctx,
+            self.plan.plan_times > self.plan.run_times,
+            required_charge=60,
+        )
         return self.round_by_op_result(op.execute())
 
     @node_from(from_name='自动战斗', success=False, status=Operation.STATUS_TIMEOUT)

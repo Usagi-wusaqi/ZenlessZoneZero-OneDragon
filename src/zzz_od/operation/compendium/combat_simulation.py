@@ -308,7 +308,12 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='战斗结束')
     @operation_node(name='判断下一次')
     def check_next(self) -> OperationRoundResult:
-        op = ChooseNextOrFinishAfterBattle(self.ctx, self.plan.plan_times > self.plan.run_times)
+        required_charge = 20 if self.plan.card_num == CardNumEnum.DEFAULT.value.value else int(self.plan.card_num) * 20
+        op = ChooseNextOrFinishAfterBattle(
+            self.ctx,
+            self.plan.plan_times > self.plan.run_times,
+            required_charge=required_charge,
+        )
         return self.round_by_op_result(op.execute())
 
     @node_from(from_name='自动战斗', success=False, status=Operation.STATUS_TIMEOUT)
