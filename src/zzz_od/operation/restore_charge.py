@@ -25,7 +25,7 @@ class RestoreCharge(ZOperation):
 
     SOURCE_BACKUP_CHARGE: ClassVar[str] = '储蓄电量'
     SOURCE_ETHER_BATTERY: ClassVar[str] = '以太电池'
-    STATUS_SKIP_BACKUP_CHARGE: ClassVar[str] = '跳过储蓄电量'
+    STATUS_SKIP_RESTORE_CHARGE: ClassVar[str] = '跳过恢复电量'
     STATUS_RESELECT_SOURCE: ClassVar[str] = '重新选择电量来源'
 
     def __init__(self, ctx: ZContext, required_charge: int | None = None, is_menu: bool = False):
@@ -54,6 +54,22 @@ class RestoreCharge(ZOperation):
 
     def _should_adjust_restore_amount(self) -> bool:
         return self.required_charge is not None and self.is_menu
+
+    def _is_source_charge_enough(self, source: str, current_amount: int) -> bool:
+        if self.required_charge is None:
+            return True
+        if source == self.SOURCE_BACKUP_CHARGE:
+            return current_amount >= self.required_charge
+        if source == self.SOURCE_ETHER_BATTERY:
+            return current_amount * 60 >= self.required_charge
+        return True
+
+    def _get_insufficient_source_status(self, source: str) -> str:
+        if (source == self.SOURCE_BACKUP_CHARGE
+            and self.config.restore_charge == RestoreChargeEnum.BOTH.value.value):
+            self.skip_backup_charge = True
+            return self.STATUS_RESELECT_SOURCE
+        return self.STATUS_SKIP_RESTORE_CHARGE
 
     def _get_target_source_list(self) -> list[str]:
         if self.config.restore_charge == RestoreChargeEnum.BACKUP_ONLY.value.value:
@@ -118,15 +134,15 @@ class RestoreCharge(ZOperation):
             return self.round_retry('未识别到电量数值', wait=0.5)
 
         # 储蓄电量不足时，不再提取无效数量
-        if (self.required_charge is not None
-            and self.previous_node.status == self.SOURCE_BACKUP_CHARGE
-            and self.required_charge > current_amount):
-            if self.config.restore_charge == RestoreChargeEnum.BOTH.value.value:
-                self.skip_backup_charge = True
-                return self.round_success(status=self.STATUS_RESELECT_SOURCE, data=current_amount, wait=0.5)
-            return self.round_success(status=self.STATUS_SKIP_BACKUP_CHARGE, data=current_amount, wait=0.5)
+        source = self.previous_node.status
+        if not self._is_source_charge_enough(source, current_amount):
+            return self.round_success(
+                status=self._get_insufficient_source_status(source),
+                data=current_amount,
+                wait=0.5,
+            )
 
-        return self.round_success(status=self.previous_node.status, data=current_amount, wait=0.5)
+        return self.round_success(status=source, data=current_amount, wait=0.5)
 
     @node_from(from_name='识别当前数量', success=False)
     @operation_node(name='电量恢复失败')
@@ -134,12 +150,12 @@ class RestoreCharge(ZOperation):
         """电量恢复失败的处理节点"""
         return self.round_fail(self.previous_node.status)
 
-    @node_from(from_name='识别当前数量', status=STATUS_SKIP_BACKUP_CHARGE)
+    @node_from(from_name='识别当前数量', status=STATUS_SKIP_RESTORE_CHARGE)
     @operation_node(name='关闭恢复弹窗')
     def close_restore_popup(self) -> OperationRoundResult:
         result = self.round_by_find_area(self.last_screenshot, '恢复电量', '标题')
         if not result.is_success:
-            return self.round_success(status=self.STATUS_SKIP_BACKUP_CHARGE, wait=0.5)
+            return self.round_success(status=self.STATUS_SKIP_RESTORE_CHARGE, wait=0.5)
 
         click_result = self.round_by_click_area('菜单', '返回', success_wait=0.5)
         if click_result.is_success:
