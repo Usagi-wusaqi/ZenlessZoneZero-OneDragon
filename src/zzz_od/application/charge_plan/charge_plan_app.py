@@ -10,6 +10,7 @@ from zzz_od.application.charge_plan import charge_plan_const
 from zzz_od.application.charge_plan.charge_plan_config import (
     ChargePlanConfig,
     ChargePlanItem,
+    RestoreChargeEnum,
 )
 from zzz_od.application.charge_plan.charge_plan_run_record import ChargePlanRunRecord
 from zzz_od.application.zzz_application import ZApplication
@@ -51,10 +52,56 @@ class ChargePlanApp(ZApplication):
         self.required_charge: int = 0  # 需要的电量
         self.last_tried_plan: ChargePlanItem | None = None
         self.current_plan: ChargePlanItem | None = None
+        # 菜单态预读缓存: (预读时的菜单电量, 各来源识别到的剩余数量)
+        self.probed_restore_source: tuple[int, dict[str, int]] | None = None
+
+    def _get_cached_source_result(
+            self,
+            source_amount_map: dict[str, int],
+            source: str,
+            required_charge: int,
+            charge_per_unit: int = 1,
+    ) -> bool | None:
+        amount = source_amount_map.get(source)
+        if amount is None:
+            return None
+        return amount * charge_per_unit >= required_charge
+
+    def _get_cached_restore_charge_result(self, required_charge: int) -> bool | None:
+        if self.probed_restore_source is None:
+            return None
+
+        probed_charge_power, source_amount_map = self.probed_restore_source
+        # 只有菜单电量没变化时，这次预读结果才仍然可信
+        if probed_charge_power != self.charge_power:
+            return None
+
+        if self.config.restore_charge == RestoreChargeEnum.BACKUP_ONLY.value.value:
+            return self._get_cached_source_result(
+                source_amount_map, RestoreCharge.SOURCE_BACKUP_CHARGE, required_charge
+            )
+
+        if self.config.restore_charge == RestoreChargeEnum.ETHER_ONLY.value.value:
+            return self._get_cached_source_result(
+                source_amount_map, RestoreCharge.SOURCE_ETHER_BATTERY, required_charge, charge_per_unit=60
+            )
+
+        if self.config.restore_charge == RestoreChargeEnum.BOTH.value.value:
+            backup_charge_result = self._get_cached_source_result(
+                source_amount_map, RestoreCharge.SOURCE_BACKUP_CHARGE, required_charge
+            )
+            if backup_charge_result is not False:
+                return backup_charge_result
+            return self._get_cached_source_result(
+                source_amount_map, RestoreCharge.SOURCE_ETHER_BATTERY, required_charge, charge_per_unit=60
+            )
+
+        return False
 
     @operation_node(name='开始体力计划', is_start_node=True)
     def start_charge_plan(self) -> OperationRoundResult:
         self.last_tried_plan = None
+        self.probed_restore_source = None
         for plan in self.config.plan_list:
             plan.skipped = False
         return self.round_success()
@@ -79,6 +126,10 @@ class ChargePlanApp(ZApplication):
         digit = str_utils.get_positive_digits(ocr_result, None)
         if digit is None:
             return self.round_retry('未识别到电量', wait=1)
+
+        if digit != self.charge_power:
+            # 体力发生变化后，上一次菜单态预读到的恢复来源数量也要重新识别
+            self.probed_restore_source = None
 
         self.charge_power = digit
         self.run_record.record_current_charge_power(digit)
@@ -124,6 +175,20 @@ class ChargePlanApp(ZApplication):
                         self.last_tried_plan = candidate_plan
                         continue
                 else:
+                    # 菜单状态没变时，优先复用刚刚预读过的恢复来源数量，避免重复打开恢复弹窗
+                    cached_restore_charge_result = self._get_cached_restore_charge_result(
+                        need_charge_power - self.charge_power
+                    )
+                    if cached_restore_charge_result is True:
+                        self.current_plan = candidate_plan
+                        self.required_charge = need_charge_power - self.charge_power
+                        return self.round_success()
+                    if cached_restore_charge_result is False:
+                        if not self.config.skip_plan:
+                            return self.round_success(ChargePlanApp.STATUS_ROUND_FINISHED)
+                        self.last_tried_plan = candidate_plan
+                        continue
+
                     # 设置下一个计划，然后触发恢复电量
                     self.current_plan = candidate_plan
                     self.required_charge = need_charge_power - self.charge_power
@@ -217,7 +282,11 @@ class ChargePlanApp(ZApplication):
             self.required_charge,
             is_menu=True
         )
-        return self.round_by_op_result(op.execute())
+        result = self.round_by_op_result(op.execute())
+        if result.is_success:
+            # 菜单态预读结束后，记录本次识别结果，供后续计划在同一菜单状态下复用
+            self.probed_restore_source = (self.charge_power, op.source_amount_map.copy())
+        return result
 
     @node_from(from_name='跳过或结束计划', status=STATUS_ROUND_FINISHED)
     @node_from(from_name='查找并选择下一个可执行任务', status=STATUS_ROUND_FINISHED)
