@@ -119,11 +119,9 @@ class RestoreCharge(ZOperation):
     @node_from(from_name='选择电量来源')
     @operation_node(name='确认电量来源')
     def confirm_charge_source(self) -> OperationRoundResult:
-        confirm_area = self.ctx.screen_loader.get_area('恢复电量', '确认')
-        click = self.round_by_ocr_and_click(self.last_screenshot, gt('确认', 'game'), confirm_area)
+        click = self.round_by_find_and_click_area(self.last_screenshot, '恢复电量', '确认', success_wait=0.5, retry_wait=0.5)
         if click.is_success:
             return self.round_success(status=self.previous_node.status, wait=0.5)
-
         return self.round_retry('未找到确认按钮', wait=0.5)
 
     @node_from(from_name='确认电量来源')
@@ -192,18 +190,15 @@ class RestoreCharge(ZOperation):
     @operation_node(name='确认恢复电量')
     def confirm_restore_charge(self) -> OperationRoundResult:
         # 菜单态预读会被前面的专用状态边拦走；走到这里说明当前弹窗可以直接确认
-        confirm_area = self.ctx.screen_loader.get_area('恢复电量', '确认')
-        return self.round_by_ocr_and_click(self.last_screenshot, gt('确认', 'game'), confirm_area, success_wait=1)
+        return self.round_by_find_and_click_area(self.last_screenshot, '恢复电量', '确认', success_wait=1, retry_wait=0.5)
 
     @node_from(from_name='确认恢复电量')
     @operation_node(name='恢复后点击确认')
     def confirm_after_restore(self) -> OperationRoundResult:
-        confirm_area = self.ctx.screen_loader.get_area('恢复电量', '确认')
-        result = self.round_by_ocr_and_click(self.last_screenshot, gt('确认', 'game'), confirm_area, success_wait=0.5)
+        result = self.round_by_find_and_click_area(self.last_screenshot, '恢复电量', '确认', success_wait=0.5, retry_wait=0.5)
         if result.is_success:
             return self.round_success('恢复电量成功', wait=0.5)
-        else:
-            return self.round_retry('恢复电量失败', wait=0.5)
+        return self.round_retry('恢复电量失败', wait=0.5)
 
 
 def __debug_charge() -> None:
