@@ -286,7 +286,10 @@ class NotoriousHunt(ZOperation):
     def restore_charge(self) -> OperationRoundResult:
         if not self.charge_plan_config.is_restore_charge_enabled:
             return self.round_success(NotoriousHunt.STATUS_CHARGE_NOT_ENOUGH)
-        op = RestoreCharge(self.ctx)
+        op = RestoreCharge(
+            self.ctx,
+            required_charge=self.plan.estimated_charge_power if self.use_charge_power else None,
+        )
         result = self.round_by_op_result(op.execute())
         return result if result.is_success else self.round_success(NotoriousHunt.STATUS_CHARGE_NOT_ENOUGH)
 

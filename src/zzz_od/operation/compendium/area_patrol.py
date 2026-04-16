@@ -119,7 +119,7 @@ class AreaPatrol(ZOperation):
     def restore_charge(self) -> OperationRoundResult:
         if not self.config.is_restore_charge_enabled:
             return self.round_success(AreaPatrol.STATUS_CHARGE_NOT_ENOUGH)
-        op = RestoreCharge(self.ctx)
+        op = RestoreCharge(self.ctx, required_charge=self.plan.estimated_charge_power)
         result = self.round_by_op_result(op.execute())
         return result if result.is_success else self.round_success(AreaPatrol.STATUS_CHARGE_NOT_ENOUGH)
 
