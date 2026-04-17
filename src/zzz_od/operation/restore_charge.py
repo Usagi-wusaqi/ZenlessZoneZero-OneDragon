@@ -27,8 +27,10 @@ class RestoreCharge(ZOperation):
     SOURCE_BACKUP_CHARGE: ClassVar[str] = '储蓄电量'
     SOURCE_ETHER_BATTERY: ClassVar[str] = '以太电池'
     STATUS_SKIP_RESTORE_CHARGE: ClassVar[str] = '跳过恢复电量'
+    STATUS_CHARGE_NOT_ENOUGH: ClassVar[str] = '电量不足'
     STATUS_CONTINUE_TO_MISSION: ClassVar[str] = '继续前往副本'
     STATUS_RESELECT_SOURCE: ClassVar[str] = '重新选择电量来源'
+    STATUS_RESTORE_SUCCESS: ClassVar[str] = '恢复电量成功'
 
     def __init__(self, ctx: ZContext, required_charge: int | None = None, is_menu: bool = False) -> None:
         """
@@ -36,7 +38,7 @@ class RestoreCharge(ZOperation):
 
         Args:
             ctx: ZContext实例
-            required_charge: 需要的电量
+            required_charge: 菜单态预读时所需的电量
             is_menu: 是否在菜单界面
         """
         ZOperation.__init__(
@@ -52,10 +54,18 @@ class RestoreCharge(ZOperation):
 
         self.required_charge = required_charge
         self.is_menu = is_menu
+        self.is_after_battle_retry: bool = False
         self.skip_backup_charge: bool = False
 
     def _should_probe_source_in_menu(self) -> bool:
         return self.is_menu and self.required_charge is not None
+
+    def _should_confirm_restore(self, current_amount: int, exchange_amount: int) -> bool:
+        if exchange_amount > current_amount:
+            return False
+        if self.is_after_battle_retry:
+            return exchange_amount < current_amount
+        return exchange_amount <= current_amount
 
     def _is_source_charge_enough(self, source: str, current_amount: int) -> bool:
         if self.required_charge is None:
@@ -71,7 +81,15 @@ class RestoreCharge(ZOperation):
             and self.config.restore_charge == RestoreChargeEnum.BOTH.value.value):
             self.skip_backup_charge = True
             return self.STATUS_RESELECT_SOURCE
-        return self.STATUS_SKIP_RESTORE_CHARGE
+        if self.is_menu:
+            return self.STATUS_SKIP_RESTORE_CHARGE
+        return self.STATUS_CHARGE_NOT_ENOUGH
+
+    def _get_amount_by_area(self, area_name: str) -> int | None:
+        amount_area = self.ctx.screen_loader.get_area('恢复电量', area_name)
+        part = cv2_utils.crop_image_only(self.last_screenshot, amount_area.rect)
+        ocr_result = self.ctx.ocr.run_ocr_single_line(part)
+        return str_utils.get_positive_digits(ocr_result)
 
     @node_from(from_name='关闭快捷使用', status=STATUS_RESELECT_SOURCE)
     @operation_node(name='打开恢复界面', is_start_node=True)
@@ -129,13 +147,9 @@ class RestoreCharge(ZOperation):
             if not quick_use_result.is_success:
                 return self.round_retry('未识别到快捷使用', wait=0.5)
 
-        amount_area = self.ctx.screen_loader.get_area('恢复电量', '当前数量')
-        part = cv2_utils.crop_image_only(self.last_screenshot, amount_area.rect)
-        ocr_result = self.ctx.ocr.run_ocr_single_line(part)
-        current_amount = str_utils.get_positive_digits(ocr_result)
-
+        current_amount = self._get_amount_by_area('当前数量')
         if current_amount is None:
-            return self.round_retry('未识别到电量数值', wait=0.5)
+            return self.round_retry('未识别到当前数量', wait=0.5)
 
         log.info(f'{source} {current_amount}')
 
@@ -154,15 +168,22 @@ class RestoreCharge(ZOperation):
                 wait=0.5,
             )
 
-        # 储蓄电量或以太电池不足以启动当前计划时，不再确认这次无效恢复
-        if not self._is_source_charge_enough(source, current_amount):
+        exchange_amount = self._get_amount_by_area('兑换数量-数字输入框')
+        if exchange_amount is None:
+            return self.round_retry('未识别到兑换数量', wait=0.5)
+
+        log.info(f'{source} 兑换数量 {exchange_amount}')
+        if exchange_amount > current_amount:
+            return self.round_retry('兑换数量大于当前数量', wait=0.5)
+
+        if not self._should_confirm_restore(current_amount, exchange_amount):
             return self.round_success(
                 status=self._get_insufficient_source_status(source),
-                data=current_amount,
+                data=exchange_amount,
                 wait=0.5,
             )
 
-        return self.round_success(status=source, data=current_amount, wait=0.5)
+        return self.round_success(status=source, data=exchange_amount, wait=0.5)
 
     @node_from(from_name='识别当前数量', status=STATUS_CONTINUE_TO_MISSION)
     @node_from(from_name='识别当前数量', status=STATUS_RESELECT_SOURCE)
@@ -181,7 +202,8 @@ class RestoreCharge(ZOperation):
 
         return self.round_retry('未关闭快捷使用', wait=0.5)
 
-    @node_from(from_name='识别当前数量')
+    @node_from(from_name='识别当前数量', status=SOURCE_BACKUP_CHARGE)
+    @node_from(from_name='识别当前数量', status=SOURCE_ETHER_BATTERY)
     @operation_node(name='确认恢复电量')
     def confirm_restore_charge(self) -> OperationRoundResult:
         # 菜单态预读会被前面的专用状态边拦走；走到这里说明当前弹窗可以直接确认
@@ -192,7 +214,7 @@ class RestoreCharge(ZOperation):
     def confirm_after_restore(self) -> OperationRoundResult:
         result = self.round_by_find_and_click_area(self.last_screenshot, '恢复电量', '确认', success_wait=0.5, retry_wait=0.5)
         if result.is_success:
-            return self.round_success('恢复电量成功', wait=0.5)
+            return self.round_success(self.STATUS_RESTORE_SUCCESS, wait=0.5)
         return self.round_retry('恢复电量失败', wait=0.5)
 
 def __debug_charge():
