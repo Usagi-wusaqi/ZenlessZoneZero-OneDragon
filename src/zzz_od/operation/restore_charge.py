@@ -102,9 +102,6 @@ class RestoreCharge(ZOperation):
         else:
             target_list = []
 
-        if not target_list:
-            return self.round_fail('未配置可用电量来源', wait=0.5)
-
         target_text_list = [gt(text, 'game') for text in target_list]
         target_area = self.ctx.screen_loader.get_area('恢复电量', '类型')
 
@@ -198,8 +195,7 @@ class RestoreCharge(ZOperation):
             return self.round_success('恢复电量成功', wait=0.5)
         return self.round_retry('恢复电量失败', wait=0.5)
 
-
-def __debug_charge() -> None:
+def __debug_charge():
     ctx = ZContext()
     ctx.init()
     ctx.init_ocr()
@@ -214,7 +210,7 @@ def __debug_charge() -> None:
     cv2_utils.show_image(part, wait=0)
     print(ocr_result)
 
-def __debug() -> None:
+def __debug():
     ctx = ZContext()
     ctx.init()
     ctx.init_ocr()
