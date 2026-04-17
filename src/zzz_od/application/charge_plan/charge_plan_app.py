@@ -183,9 +183,12 @@ class ChargePlanApp(ZApplication):
     @node_from(from_name='恶名狩猎', success=False)
     @operation_node(name='挑战完成')
     def challenge_complete(self) -> OperationRoundResult:
-        # 挑战成功后，重置last_tried_plan以继续查找下一个任务
+        # 成功后继续正常轮转；失败则标记当前计划已跳过，避免在同一轮里死循环重试
         if self.previous_node.is_success:
             self.last_tried_plan = None
+        else:
+            self.current_plan.skipped = True
+            self.last_tried_plan = self.current_plan
         return self.round_success()
 
     @node_from(from_name='实战模拟室', status=CombatSimulation.STATUS_CHARGE_NOT_ENOUGH)
