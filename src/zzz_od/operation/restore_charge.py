@@ -53,7 +53,6 @@ class RestoreCharge(ZOperation):
         self.required_charge = required_charge
         self.is_menu = is_menu
         self.skip_backup_charge: bool = False
-        self.source_amount_map: dict[str, int] = {}
 
     def _should_probe_source_in_menu(self) -> bool:
         return self.is_menu and self.required_charge is not None
@@ -141,7 +140,6 @@ class RestoreCharge(ZOperation):
         if current_amount is None:
             return self.round_retry('未识别到电量数值', wait=0.5)
 
-        self.source_amount_map[source] = current_amount
         log.info(f'{source} {current_amount}')
 
         if self._should_probe_source_in_menu():
