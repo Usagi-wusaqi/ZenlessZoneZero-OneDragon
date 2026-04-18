@@ -58,5 +58,5 @@ class ChooseNextOrFinishAfterBattle(ZOperation):
         else:
             self.try_next = False
 
-        # 先盲点一次“完成”处理弹窗，再通过节点边回到判断再来一次，按 try_next 决定真正的下一步
-        return self.round_by_click_area('战斗画面', '战斗结果-完成', success_wait=0.5)
+        # 恢复流程结束后回到“判断再来一次”；是否继续由 try_next 决定，这里不直接点“完成”
+        return self.round_success(status='战斗结果-完成', wait=0.5)

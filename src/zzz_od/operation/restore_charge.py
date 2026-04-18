@@ -95,8 +95,9 @@ class RestoreCharge(ZOperation):
 
         if self.is_menu:
             return self.round_by_find_and_click_area(self.last_screenshot, '菜单', '文本-电量', success_wait=0.5)
-        else:
-            return self.round_by_find_and_click_area(self.last_screenshot, '实战模拟室', '下一步', success_wait=0.5)
+        if self.is_after_battle_retry:
+            return self.round_by_find_and_click_area(self.last_screenshot, '战斗画面', '战斗结果-再来一次', success_wait=0.5)
+        return self.round_by_find_and_click_area(self.last_screenshot, '实战模拟室', '下一步', success_wait=0.5)
 
     @node_from(from_name='打开恢复界面')
     @operation_node(name='选择电量来源')
@@ -106,10 +107,9 @@ class RestoreCharge(ZOperation):
         elif self.config.restore_charge == RestoreChargeEnum.ETHER_ONLY.value.value:
             target_list = [self.SOURCE_ETHER_BATTERY]
         elif self.config.restore_charge == RestoreChargeEnum.BOTH.value.value:
+            target_list = [self.SOURCE_BACKUP_CHARGE, self.SOURCE_ETHER_BATTERY]
             if self.skip_backup_charge:
-                target_list = [self.SOURCE_ETHER_BATTERY]
-            else:
-                target_list = [self.SOURCE_BACKUP_CHARGE, self.SOURCE_ETHER_BATTERY]
+                target_list = target_list[1:]
         else:
             target_list = []
 
