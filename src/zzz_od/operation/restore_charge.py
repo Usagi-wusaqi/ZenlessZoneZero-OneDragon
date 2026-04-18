@@ -60,9 +60,7 @@ class RestoreCharge(ZOperation):
     def _should_confirm_restore(self, current_amount: int, exchange_amount: int) -> bool:
         if exchange_amount > current_amount:
             return False
-        if self.is_after_battle_retry:
-            return exchange_amount < current_amount
-        return exchange_amount <= current_amount
+        return exchange_amount < current_amount
 
     def _is_source_charge_enough(self, source: str, current_amount: int) -> bool:
         if self.required_charge is None:
