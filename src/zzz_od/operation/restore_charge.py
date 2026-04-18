@@ -99,7 +99,6 @@ class RestoreCharge(ZOperation):
             return self.round_by_find_and_click_area(self.last_screenshot, '实战模拟室', '下一步', success_wait=0.5)
 
     @node_from(from_name='打开恢复界面')
-    @node_from(from_name='识别当前数量', status='重新选择电量来源')
     @operation_node(name='选择电量来源')
     def select_charge_source(self) -> OperationRoundResult:
         if self.config.restore_charge == RestoreChargeEnum.BACKUP_ONLY.value.value:
