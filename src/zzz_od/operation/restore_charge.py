@@ -200,12 +200,22 @@ class RestoreCharge(ZOperation):
         return self.round_by_find_and_click_area(self.last_screenshot, '恢复电量', '确认', success_wait=1, retry_wait=0.5)
 
     @node_from(from_name='确认恢复电量')
-    @operation_node(name='等待恢复完成')
+    @operation_node(name='恢复后处理')
     def confirm_after_restore(self) -> OperationRoundResult:
-        # 上一节点已点下恢复确认；这里仅轮询“快捷使用”是否消失
-        result = self.round_by_find_area(self.last_screenshot, '恢复电量', '快捷使用')
-        if result.is_success:
+        """
+        选副本阶段触发恢复：“恢复电量”的确认->“快捷使用”的确认->“获得”的确认
+        战斗后点“再来一次”触发恢复：“恢复电量”的确认->“快捷使用”的确认
+        上个节点已处理“快捷使用”的确认，这个节点处理后续可能出现的确认层
+        """
+        for area_name in ('标题-获得', '快捷使用'):
+            result = self.round_by_find_area(self.last_screenshot, '恢复电量', area_name)
+            if not result.is_success:
+                continue
+            result = self.round_by_find_and_click_area(self.last_screenshot, '恢复电量', '确认', success_wait=0.5, retry_wait=0.5)
+            if result.is_success:
+                return self.round_wait('等待恢复完成', wait=0.5)
             return self.round_retry('恢复电量失败', wait=0.5)
+
         return self.round_success(self.STATUS_RESTORE_SUCCESS, wait=0.5)
 
 def __debug_charge():
