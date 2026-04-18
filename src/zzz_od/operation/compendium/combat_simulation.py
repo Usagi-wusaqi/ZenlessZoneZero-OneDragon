@@ -116,7 +116,7 @@ class CombatSimulation(ZOperation):
         # 滑动次数大于10则返回失败
         if self.scroll_count > 10:
             self.scroll_count = 0
-            return self.round_success(status=CombatSimulation.STATUS_CHOOSE_FAIL)
+            return self.round_fail(status=CombatSimulation.STATUS_CHOOSE_FAIL)
 
         if self.plan.is_agent_plan:
             target_point: Point | None = None
