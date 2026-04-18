@@ -134,7 +134,7 @@ class ChargePlanApp(ZApplication):
             return self.round_success()
 
     @node_from(from_name='查找并选择下一个可执行任务')
-    @node_from(from_name='恢复电量', status=RestoreCharge.STATUS_CONTINUE_TO_MISSION)
+    @node_from(from_name='恢复电量', status='继续前往副本')
     @operation_node(name='传送')
     def transport(self) -> OperationRoundResult:
         # 使用已经在查找并选择下一个可执行任务节点中设置好的self.current_plan
@@ -196,7 +196,7 @@ class ChargePlanApp(ZApplication):
     @node_from(from_name='专业挑战室', status=ExpertChallenge.STATUS_CHARGE_NOT_ENOUGH)
     @node_from(from_name='恶名狩猎', status=NotoriousHunt.STATUS_CHARGE_NOT_ENOUGH)
     @node_from(from_name='恶名狩猎', status=NotoriousHunt.STATUS_BLOCKED_BY_LEFT_TIMES)
-    @node_from(from_name='恢复电量', status=RestoreCharge.STATUS_SKIP_RESTORE_CHARGE)
+    @node_from(from_name='恢复电量', status=RestoreCharge.STATUS_CHARGE_NOT_ENOUGH)
     @node_from(from_name='传送', success=False, status='找不到 代理人方案培养')
     @operation_node(name='跳过或结束计划')
     def skip_plan_or_finish(self) -> OperationRoundResult:
