@@ -97,7 +97,7 @@ class AreaPatrol(ZOperation):
     @operation_node(name='下一步', node_max_retry_times=10)  # 部分机器加载较慢 延长出战的识别时间
     def click_next(self) -> OperationRoundResult:
         # 防止前面电量识别错误
-        result = self.round_by_find_area(self.last_screenshot, '恢复电量', '标题')
+        result = self.round_by_find_area(self.last_screenshot, '恢复电量', '标题-恢复电量')
         if result.is_success:
             return self.round_success(status=AreaPatrol.STATUS_CHARGE_NOT_ENOUGH)
 

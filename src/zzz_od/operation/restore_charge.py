@@ -89,7 +89,7 @@ class RestoreCharge(ZOperation):
     @operation_node(name='打开恢复界面', is_start_node=True)
     def click_charge_text(self) -> OperationRoundResult:
         # 检查是否已经在恢复界面
-        result = self.round_by_find_area(self.last_screenshot, '恢复电量', '标题')
+        result = self.round_by_find_area(self.last_screenshot, '恢复电量', '标题-恢复电量')
         if result.is_success:
             return self.round_success()
 
@@ -140,7 +140,7 @@ class RestoreCharge(ZOperation):
             return self.round_retry('未识别到电量来源', wait=0.5)
 
         if self._should_probe_source_in_menu():
-            quick_use_result = self.round_by_find_area(self.last_screenshot, '恢复电量', '快捷使用')
+            quick_use_result = self.round_by_find_area(self.last_screenshot, '恢复电量', '标题-快捷使用')
             if not quick_use_result.is_success:
                 return self.round_retry('未识别到快捷使用', wait=0.5)
 
@@ -182,7 +182,7 @@ class RestoreCharge(ZOperation):
     @operation_node(name='关闭快捷使用')
     def close_quick_use_popup(self) -> OperationRoundResult:
         # 菜单态预读后，关闭“快捷使用”就会直接回到菜单，不需要再额外关闭一次外层“恢复电量”弹窗
-        result = self.round_by_find_area(self.last_screenshot, '恢复电量', '快捷使用')
+        result = self.round_by_find_area(self.last_screenshot, '恢复电量', '标题-快捷使用')
         if not result.is_success:
             return self.round_success(status=self.previous_node.status, wait=0.5)
 
@@ -207,7 +207,7 @@ class RestoreCharge(ZOperation):
         战斗后点“再来一次”触发恢复：“恢复电量”的确认->“快捷使用”的确认
         上个节点已处理“快捷使用”的确认，这个节点处理后续可能出现的确认层
         """
-        for area_name in ('标题-获得', '快捷使用'):
+        for area_name in ('标题-获得', '标题-快捷使用'):
             result = self.round_by_find_area(self.last_screenshot, '恢复电量', area_name)
             if not result.is_success:
                 continue

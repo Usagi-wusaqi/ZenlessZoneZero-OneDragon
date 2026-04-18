@@ -37,7 +37,7 @@ class ChooseNextOrFinishAfterBattle(ZOperation):
     @operation_node(name='恢复电量')
     def restore_charge(self) -> OperationRoundResult:
         # 检查是否在恢复电量界面
-        result = self.round_by_find_area(self.last_screenshot, '恢复电量', '标题')
+        result = self.round_by_find_area(self.last_screenshot, '恢复电量', '标题-恢复电量')
         if not result.is_success:
             # 没有恢复弹窗，说明这次“再来一次”已直接生效
             return self.round_success(status='战斗结果-再来一次')
