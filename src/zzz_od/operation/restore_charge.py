@@ -181,14 +181,13 @@ class RestoreCharge(ZOperation):
     @node_from(from_name='识别当前数量', status=STATUS_CHARGE_NOT_ENOUGH)
     @operation_node(name='关闭快捷使用')
     def close_quick_use_popup(self) -> OperationRoundResult:
-        # 菜单态预读结束后，关闭“快捷使用”就会直接回到菜单
-        # 不需要再额外关闭一次外层“恢复电量”弹窗
-        quick_use_result = self.round_by_find_area(self.last_screenshot, '恢复电量', '快捷使用')
-        if not quick_use_result.is_success:
+        # 菜单态预读后，关闭“快捷使用”就会直接回到菜单，不需要再额外关闭一次外层“恢复电量”弹窗
+        result = self.round_by_find_area(self.last_screenshot, '恢复电量', '快捷使用')
+        if not result.is_success:
             return self.round_success(status=self.previous_node.status, wait=0.5)
 
-        click_result = self.round_by_find_and_click_area(self.last_screenshot, '菜单', '关闭', success_wait=0.5, retry_wait=0.5)
-        if click_result.is_success:
+        result = self.round_by_find_and_click_area(self.last_screenshot, '菜单', '关闭', success_wait=0.5, retry_wait=0.5)
+        if result.is_success:
             return self.round_retry('尝试关闭快捷使用', wait=0.5)
 
         return self.round_retry('未关闭快捷使用', wait=0.5)
@@ -197,16 +196,17 @@ class RestoreCharge(ZOperation):
     @node_from(from_name='识别当前数量', status=SOURCE_ETHER_BATTERY)
     @operation_node(name='确认恢复电量')
     def confirm_restore_charge(self) -> OperationRoundResult:
-        # 菜单态预读会被前面的专用状态边拦走；走到这里说明当前弹窗可以直接确认
+        # 菜单态预读后，不会走到这里；这里只有副本内真正恢复时才点确认
         return self.round_by_find_and_click_area(self.last_screenshot, '恢复电量', '确认', success_wait=1, retry_wait=0.5)
 
     @node_from(from_name='确认恢复电量')
-    @operation_node(name='恢复后点击确认')
+    @operation_node(name='等待恢复完成')
     def confirm_after_restore(self) -> OperationRoundResult:
-        result = self.round_by_find_and_click_area(self.last_screenshot, '恢复电量', '确认', success_wait=0.5, retry_wait=0.5)
+        # 上一节点已点下恢复确认；这里仅轮询“快捷使用”是否消失
+        result = self.round_by_find_area(self.last_screenshot, '恢复电量', '快捷使用')
         if result.is_success:
-            return self.round_success(self.STATUS_RESTORE_SUCCESS, wait=0.5)
-        return self.round_retry('恢复电量失败', wait=0.5)
+            return self.round_retry('恢复电量失败', wait=0.5)
+        return self.round_success(self.STATUS_RESTORE_SUCCESS, wait=0.5)
 
 def __debug_charge():
     ctx = ZContext()
