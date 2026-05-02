@@ -58,8 +58,7 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         layout.setContentsMargins(0, 0, 0, 0)
         widget.setLayout(layout)
 
-        self.help_opt = HelpCard(url='',
-                                 content='使用此功能前，建议勘域编队中要有一名合适的行走位')
+        self.help_opt = HelpCard(url='https://one-dragon.com/zzz/zh/feat_one_dragon/world_patrol.html')
         layout.addWidget(self.help_opt)
 
         self.auto_battle_opt = ComboBoxSettingCard(icon=FluentIcon.SEARCH, title='自动战斗')
