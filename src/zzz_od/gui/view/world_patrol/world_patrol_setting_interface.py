@@ -3,20 +3,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import FluentIcon, PushSettingCard, SpinBox
+from qfluentwidgets import FluentIcon, PushSettingCard
 
 from one_dragon.base.config.config_item import ConfigItem
 from one_dragon.utils.log_utils import log
 from one_dragon_qt.services.app_setting.app_setting_provider import GroupIdMixin
 from one_dragon_qt.utils.config_utils import get_prop_adapter
-from one_dragon_qt.widgets.combo_box import ComboBox
 from one_dragon_qt.widgets.setting_card.combo_box_setting_card import (
     ComboBoxSettingCard,
 )
 from one_dragon_qt.widgets.setting_card.help_card import HelpCard
-from one_dragon_qt.widgets.setting_card.multi_push_setting_card import (
-    MultiPushSettingCard,
-)
 from one_dragon_qt.widgets.setting_card.spin_box_setting_card import SpinBoxSettingCard
 from one_dragon_qt.widgets.vertical_scroll_interface import VerticalScrollInterface
 from zzz_od.application.battle_assistant.auto_battle_config import (
@@ -69,25 +65,21 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         self.auto_battle_opt = ComboBoxSettingCard(icon=FluentIcon.SEARCH, title='自动战斗')
         layout.addWidget(self.auto_battle_opt)
 
-        self.ui_disappear_action_combo = ComboBox()
-        self.ui_disappear_action_combo.setMinimumWidth(180)
-        self.ui_disappear_action_combo.currentIndexChanged.connect(self._on_ui_disappear_action_changed)
-
-        self.ui_disappear_seconds_spin = SpinBox()
-        self.ui_disappear_seconds_spin.setRange(1, 600)
-        self.ui_disappear_seconds_spin.setSingleStep(1)
-        self.ui_disappear_seconds_spin.setSuffix(' 秒')
-        self.ui_disappear_seconds_spin.setMinimumWidth(100)
-        self.ui_disappear_seconds_spin.setMaximumWidth(140)
-        self.ui_disappear_seconds_spin.valueChanged.connect(self._on_ui_disappear_seconds_changed)
-
-        self.ui_disappear_opt = MultiPushSettingCard(
-            icon=FluentIcon.SETTING,
-            title='界面消失处理（卡电梯）',
-            content='检测到疑似卡电梯时的处理方式和持续时间',
-            btn_list=[self.ui_disappear_action_combo, self.ui_disappear_seconds_spin],
+        self.ui_disappear_seconds_opt = SpinBoxSettingCard(
+            icon=FluentIcon.STOP_WATCH,
+            title='界面消失预警时间',
+            content='UI完全消失持续到该秒数后判定为卡电梯',
+            minimum=1,
+            maximum=600,
         )
-        layout.addWidget(self.ui_disappear_opt)
+        layout.addWidget(self.ui_disappear_seconds_opt)
+
+        self.ui_disappear_action_opt = ComboBoxSettingCard(
+            icon=FluentIcon.SETTING,
+            title='界面消失处理方式',
+            content='判定为疑似卡电梯后的处理方式',
+        )
+        layout.addWidget(self.ui_disappear_action_opt)
 
         layout.addStretch(1)
         return widget
@@ -112,8 +104,8 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
 
         self.route_retry_times_opt = SpinBoxSettingCard(
             icon=FluentIcon.SYNC,
-            title='路线重试次数',
-            content='普通卡住和卡电梯重试共用；0 表示不重试',
+            title='单条路线重试上限',
+            content='任何原因卡住的最多重试次数，超限后跳过该条小路线',
             minimum=0,
             maximum=10,
         )
@@ -149,18 +141,15 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         self.auto_battle_opt.set_options_by_list(get_auto_battle_op_config_list('auto_battle'))
         self.auto_battle_opt.init_with_adapter(get_prop_adapter(self.config, 'auto_battle'))
 
-        self.ui_disappear_action_combo.set_items(
+        self.ui_disappear_action_opt.set_options_by_list(
             [
                 ConfigItem('静默失败', WorldPatrolConfig.UI_DISAPPEAR_SILENT_FAIL),
                 ConfigItem('重开游戏并跳过路线', WorldPatrolConfig.UI_DISAPPEAR_RESTART_SKIP),
                 ConfigItem('重开游戏并重试路线', WorldPatrolConfig.UI_DISAPPEAR_RESTART_RETRY),
-            ],
-            self.config.ui_disappear_action,
+            ]
         )
-
-        self.ui_disappear_seconds_spin.blockSignals(True)
-        self.ui_disappear_seconds_spin.setValue(self.config.ui_disappear_seconds)
-        self.ui_disappear_seconds_spin.blockSignals(False)
+        self.ui_disappear_action_opt.init_with_adapter(get_prop_adapter(self.config, 'ui_disappear_action'))
+        self.ui_disappear_seconds_opt.init_with_adapter(get_prop_adapter(self.config, 'ui_disappear_seconds'))
 
         self.route_retry_times_opt.init_with_adapter(get_prop_adapter(self.config, 'route_retry_times'))
 
@@ -170,13 +159,3 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
             return
         self.run_record.reset_record()
         log.info('已重置记录')
-
-    def _on_ui_disappear_action_changed(self, idx: int) -> None:
-        if self.config is None:
-            return
-        self.config.ui_disappear_action = self.ui_disappear_action_combo.itemData(idx)
-
-    def _on_ui_disappear_seconds_changed(self, value: int) -> None:
-        if self.config is None:
-            return
-        self.config.ui_disappear_seconds = value
