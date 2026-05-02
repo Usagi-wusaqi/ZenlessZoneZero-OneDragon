@@ -132,7 +132,7 @@ class WorldPatrolApp(ZApplication):
 
         route_finished = False
         fail_status = None
-        retry_times = max(0, self.config.route_retry_times)
+        retry_times = self.config.route_retry_times
         attempt_idx = 0
 
         while True:
@@ -144,11 +144,23 @@ class WorldPatrolApp(ZApplication):
                 break
 
             if result.status == WorldPatrolRunRoute.STATUS_UI_DISAPPEARED:
-                ui_disappear_result = self._handle_ui_disappeared(route, attempt_idx, retry_times)
-                if ui_disappear_result is not None:
-                    return ui_disappear_result
-                attempt_idx += 1
-                continue
+                action = self.config.ui_disappear_action
+                if action == WorldPatrolUiDisappearAction.SILENT_FAIL.value.value:
+                    self._stop_route_actions()
+                    return self.round_fail(status=f'{WorldPatrolRunRoute.STATUS_UI_DISAPPEARED} {route.full_id}')
+
+                restart_result = self._restart_game_for_ui_disappeared()
+                if restart_result.is_fail:
+                    return restart_result
+
+                if action == WorldPatrolUiDisappearAction.RESTART_AND_RETRY.value.value and attempt_idx < retry_times:
+                    attempt_idx += 1
+                    continue
+
+                self.route_idx += 1
+                if action == WorldPatrolUiDisappearAction.RESTART_AND_RETRY.value.value:
+                    return self.round_wait(status=f'界面消失重试耗尽，已重开游戏并跳过路线 {route.full_id}')
+                return self.round_wait(status=f'界面消失已重开游戏并跳过路线 {route.full_id}')
 
             if _is_stuck_over_limit_status(result.status):
                 if attempt_idx < retry_times:
@@ -170,37 +182,11 @@ class WorldPatrolApp(ZApplication):
             self.route_idx += 1
             return self.round_wait(status=f'路线失败 {fail_status} {route.full_id}')
 
-    def _handle_ui_disappeared(
-        self,
-        route: WorldPatrolRoute,
-        attempt_idx: int,
-        retry_times: int,
-    ) -> OperationRoundResult | None:
-        self._stop_route_actions()
-
-        if self.config.ui_disappear_action == WorldPatrolUiDisappearAction.SILENT_FAIL.value.value:
-            return self.round_fail(status=f'{WorldPatrolRunRoute.STATUS_UI_DISAPPEARED} {route.full_id}')
-
-        restart_result = self._restart_game_for_ui_disappeared()
-        if restart_result is not None:
-            return restart_result
-
-        if (
-            self.config.ui_disappear_action == WorldPatrolUiDisappearAction.RESTART_AND_RETRY.value.value
-            and attempt_idx < retry_times
-        ):
-            return None
-
-        self.route_idx += 1
-        if self.config.ui_disappear_action == WorldPatrolUiDisappearAction.RESTART_AND_RETRY.value.value:
-            return self.round_wait(status=f'界面消失重试耗尽，已重开游戏并跳过路线 {route.full_id}')
-        return self.round_wait(status=f'界面消失已重开游戏并跳过路线 {route.full_id}')
-
     def _stop_route_actions(self) -> None:
         self.ctx.auto_battle_context.stop_auto_battle()
         self.ctx.controller.stop_moving_forward()
 
-    def _restart_game_for_ui_disappeared(self) -> OperationRoundResult | None:
+    def _restart_game_for_ui_disappeared(self) -> OperationRoundResult:
         if self.op_to_enter_game is None:
             return self.round_fail(status='未提供打开游戏方式')
 
@@ -212,7 +198,7 @@ class WorldPatrolApp(ZApplication):
         if not enter_result.success:
             return self.round_fail(status=f'重开游戏失败 {enter_result.status}')
 
-        return None
+        return self.round_success(status='重开游戏成功')
 
 
 def __debug():
