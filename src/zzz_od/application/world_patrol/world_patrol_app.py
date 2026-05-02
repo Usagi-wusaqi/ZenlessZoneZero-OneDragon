@@ -165,7 +165,11 @@ class WorldPatrolApp(ZApplication):
                     continue
 
                 route_finished = False
-                fail_status = '重启后再次卡住' if attempt_idx > 0 else result.status
+                fail_status = (
+                    f'重试后仍卡住: {result.status}'
+                    if attempt_idx > 0
+                    else result.status
+                )
                 break
 
             fail_status = result.status
