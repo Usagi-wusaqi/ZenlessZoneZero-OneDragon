@@ -47,7 +47,7 @@ class WorldPatrolConfig(ApplicationConfig):
 
     @property
     def ui_disappear_seconds(self) -> int:
-        return int(self.get('ui_disappear_seconds', 60))
+        return min(max(int(self.get('ui_disappear_seconds', 60)), 1), 600)
 
     @ui_disappear_seconds.setter
     def ui_disappear_seconds(self, new_value: int) -> None:
@@ -55,7 +55,7 @@ class WorldPatrolConfig(ApplicationConfig):
 
     @property
     def route_retry_times(self) -> int:
-        return int(self.get('route_retry_times', 1))
+        return min(max(int(self.get('route_retry_times', 1)), 0), 10)
 
     @route_retry_times.setter
     def route_retry_times(self, new_value: int) -> None:
