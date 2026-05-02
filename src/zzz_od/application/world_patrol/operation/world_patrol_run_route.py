@@ -607,28 +607,11 @@ class WorldPatrolRunRoute(ZOperation):
                     self._reset_ui_disappear_stuck()
                     return self.round_success(status='发现地图')
 
-                if self._has_common_ui_recovery_signal():
-                    self._reset_ui_disappear_stuck()
-                else:
-                    result = self._check_ui_disappear_stuck()
-                    if result is not None:
-                        return result
+                result = self._check_ui_disappear_stuck()
+                if result is not None:
+                    return result
 
         return self.round_wait(wait=self.ctx.battle_assistant_config.screenshot_interval)
-
-    def _has_common_ui_recovery_signal(self) -> bool:
-        """检测常规 UI 是否恢复，避免把普通页面误判为卡电梯。"""
-        area_list = [
-            ('画面-通用', '返回'),
-            ('画面-通用', '关闭'),
-            ('大世界', '对话框确认'),
-            ('大世界', '对话框取消'),
-        ]
-        for screen_name, area_name in area_list:
-            result = self.round_by_find_area(self.last_screenshot, screen_name, area_name)
-            if result.is_success:
-                return True
-        return False
 
     def _reset_ui_disappear_stuck(self) -> None:
         self.ui_disappear_start_time = 0
