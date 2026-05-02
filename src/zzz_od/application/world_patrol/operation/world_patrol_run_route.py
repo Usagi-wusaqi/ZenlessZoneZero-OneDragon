@@ -29,6 +29,7 @@ from zzz_od.operation.zzz_operation import ZOperation
 
 
 class WorldPatrolRunRoute(ZOperation):
+    STATUS_UI_DISAPPEARED: str = '疑似界面消失卡死'
 
     def __init__(
         self,
@@ -136,6 +137,7 @@ class WorldPatrolRunRoute(ZOperation):
         # 自动战斗状态变量
         self.in_battle: bool = False  # 是否在战斗中
         self.last_check_battle_time: float = 0  # 上一次检测是否还在战斗的时间
+        self.ui_disappear_start_time: float = 0  # 疑似界面消失的开始时间
 
         # 自适应转向算法状态变量
         self.sensitivity: float = 1.0  # 转向灵敏度
@@ -570,6 +572,7 @@ class WorldPatrolRunRoute(ZOperation):
             self.ctx.auto_battle_context.init_auto_op(self.config.auto_battle)
 
         self.in_battle = True
+        self.ui_disappear_start_time = 0
         self.ctx.auto_battle_context.start_auto_battle()
         return self.round_success()
 
@@ -587,17 +590,58 @@ class WorldPatrolRunRoute(ZOperation):
         # 每秒检测1次是否退出了战斗
         if self.last_screenshot_time - self.last_check_battle_time > 1:
             self.last_check_battle_time = self.last_screenshot_time
-            if not self.ctx.auto_battle_context.last_check_in_battle:
-                # 当前不在战斗画面(没有攻击按钮) 但有可能是战斗结束靠近了可交互物 变成了交互按键
-                result = self.round_by_find_area(self.last_screenshot, '战斗画面', '按键-交互')
-                if result.is_success:
-                    return self.round_success(status=result.status)
-            else:
+            if self.ctx.auto_battle_context.last_check_in_battle:
+                self._reset_ui_disappear_stuck()
                 mini_map = self.ctx.world_patrol_service.cut_mini_map(self.last_screenshot)
                 if mini_map.play_mask_found:
                     return self.round_success(status='发现地图')
+            else:
+                # 当前不在战斗画面(没有攻击按钮) 但有可能是战斗结束靠近了可交互物 变成了交互按键
+                result = self.round_by_find_area(self.last_screenshot, '战斗画面', '按键-交互')
+                if result.is_success:
+                    self._reset_ui_disappear_stuck()
+                    return self.round_success(status=result.status)
+
+                mini_map = self.ctx.world_patrol_service.cut_mini_map(self.last_screenshot)
+                if mini_map.play_mask_found:
+                    self._reset_ui_disappear_stuck()
+                    return self.round_success(status='发现地图')
+
+                if self._has_common_ui_recovery_signal():
+                    self._reset_ui_disappear_stuck()
+                else:
+                    result = self._check_ui_disappear_stuck()
+                    if result is not None:
+                        return result
 
         return self.round_wait(wait=self.ctx.battle_assistant_config.screenshot_interval)
+
+    def _has_common_ui_recovery_signal(self) -> bool:
+        """检测常规 UI 是否恢复，避免把普通页面误判为卡电梯。"""
+        area_list = [
+            ('画面-通用', '返回'),
+            ('画面-通用', '关闭'),
+            ('大世界', '对话框确认'),
+            ('大世界', '对话框取消'),
+        ]
+        for screen_name, area_name in area_list:
+            result = self.round_by_find_area(self.last_screenshot, screen_name, area_name)
+            if result.is_success:
+                return True
+        return False
+
+    def _reset_ui_disappear_stuck(self) -> None:
+        self.ui_disappear_start_time = 0
+
+    def _check_ui_disappear_stuck(self) -> OperationRoundResult | None:
+        if self.ui_disappear_start_time == 0:
+            self.ui_disappear_start_time = self.last_screenshot_time
+
+        stuck_seconds = self.last_screenshot_time - self.ui_disappear_start_time
+        if stuck_seconds >= self.config.ui_disappear_seconds:
+            return self.round_fail(status=self.STATUS_UI_DISAPPEARED)
+
+        return self.round_wait(status=f'疑似界面消失 持续 {stuck_seconds:.2f} 秒')
 
     @node_from(from_name='自动战斗')
     @operation_node(name='自动战斗结束')
