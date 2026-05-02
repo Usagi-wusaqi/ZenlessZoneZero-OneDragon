@@ -9,10 +9,7 @@ from zzz_od.application.world_patrol import world_patrol_const
 from zzz_od.application.world_patrol.operation.world_patrol_run_route import (
     WorldPatrolRunRoute,
 )
-from zzz_od.application.world_patrol.world_patrol_config import (
-    WorldPatrolConfig,
-    WorldPatrolUiDisappearAction,
-)
+from zzz_od.application.world_patrol.world_patrol_config import WorldPatrolConfig
 from zzz_od.application.world_patrol.world_patrol_route import WorldPatrolRoute
 from zzz_od.application.world_patrol.world_patrol_route_list import RouteListType
 from zzz_od.application.world_patrol.world_patrol_run_record import WorldPatrolRunRecord
@@ -145,7 +142,7 @@ class WorldPatrolApp(ZApplication):
 
             if result.status == WorldPatrolRunRoute.STATUS_UI_DISAPPEARED:
                 action = self.config.ui_disappear_action
-                if action == WorldPatrolUiDisappearAction.SILENT_FAIL.value.value:
+                if action == WorldPatrolConfig.UI_DISAPPEAR_SILENT_FAIL:
                     self._stop_route_actions()
                     return self.round_fail(status=f'{WorldPatrolRunRoute.STATUS_UI_DISAPPEARED} {route.full_id}')
 
@@ -153,12 +150,12 @@ class WorldPatrolApp(ZApplication):
                 if restart_result.is_fail:
                     return restart_result
 
-                if action == WorldPatrolUiDisappearAction.RESTART_AND_RETRY.value.value and attempt_idx < retry_times:
+                if action == WorldPatrolConfig.UI_DISAPPEAR_RESTART_RETRY and attempt_idx < retry_times:
                     attempt_idx += 1
                     continue
 
                 self.route_idx += 1
-                if action == WorldPatrolUiDisappearAction.RESTART_AND_RETRY.value.value:
+                if action == WorldPatrolConfig.UI_DISAPPEAR_RESTART_RETRY:
                     return self.round_wait(status=f'界面消失重试耗尽，已重开游戏并跳过路线 {route.full_id}')
                 return self.round_wait(status=f'界面消失已重开游戏并跳过路线 {route.full_id}')
 

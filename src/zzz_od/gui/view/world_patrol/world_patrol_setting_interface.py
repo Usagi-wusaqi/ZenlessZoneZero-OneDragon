@@ -23,10 +23,7 @@ from zzz_od.application.battle_assistant.auto_battle_config import (
     get_auto_battle_op_config_list,
 )
 from zzz_od.application.world_patrol import world_patrol_const
-from zzz_od.application.world_patrol.world_patrol_config import (
-    WorldPatrolConfig,
-    WorldPatrolUiDisappearAction,
-)
+from zzz_od.application.world_patrol.world_patrol_config import WorldPatrolConfig
 from zzz_od.application.world_patrol.world_patrol_run_record import WorldPatrolRunRecord
 
 if TYPE_CHECKING:
@@ -153,7 +150,11 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         self.auto_battle_opt.init_with_adapter(get_prop_adapter(self.config, 'auto_battle'))
 
         self.ui_disappear_action_combo.set_items(
-            [i.value for i in WorldPatrolUiDisappearAction],
+            [
+                ConfigItem('静默失败', WorldPatrolConfig.UI_DISAPPEAR_SILENT_FAIL),
+                ConfigItem('重开游戏并跳过路线', WorldPatrolConfig.UI_DISAPPEAR_RESTART_SKIP),
+                ConfigItem('重开游戏并重试路线', WorldPatrolConfig.UI_DISAPPEAR_RESTART_RETRY),
+            ],
             self.config.ui_disappear_action,
         )
 

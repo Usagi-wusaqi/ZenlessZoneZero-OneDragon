@@ -1,17 +1,10 @@
-
-from enum import Enum
-
-from one_dragon.base.config.config_item import ConfigItem
 from one_dragon.base.operation.application.application_config import ApplicationConfig
 
 
-class WorldPatrolUiDisappearAction(Enum):
-    SILENT_FAIL = ConfigItem('静默失败', 'silent_fail')
-    RESTART_AND_SKIP = ConfigItem('重开游戏并跳过路线', 'restart_and_skip')
-    RESTART_AND_RETRY = ConfigItem('重开游戏并重试路线', 'restart_and_retry')
-
-
 class WorldPatrolConfig(ApplicationConfig):
+    UI_DISAPPEAR_SILENT_FAIL = 'silent_fail'
+    UI_DISAPPEAR_RESTART_SKIP = 'restart_and_skip'
+    UI_DISAPPEAR_RESTART_RETRY = 'restart_and_retry'
 
     def __init__(self, instance_idx: int, group_id: str):
         ApplicationConfig.__init__(
@@ -39,7 +32,7 @@ class WorldPatrolConfig(ApplicationConfig):
 
     @property
     def ui_disappear_action(self) -> str:
-        return self.get('ui_disappear_action', WorldPatrolUiDisappearAction.RESTART_AND_SKIP.value.value)
+        return self.get('ui_disappear_action', WorldPatrolConfig.UI_DISAPPEAR_RESTART_SKIP)
 
     @ui_disappear_action.setter
     def ui_disappear_action(self, new_value: str) -> None:
