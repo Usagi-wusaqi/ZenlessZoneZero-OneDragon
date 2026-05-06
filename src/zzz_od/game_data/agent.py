@@ -284,7 +284,7 @@ class AgentEnum(Enum):
                                               'lighter', lower_color=0, upper_color=50)])
 
     ASABA_HARUMASA = Agent('asaba_harumasa', '悠真', RareTypeEnum.S, AgentTypeEnum.ATTACK, DmgTypeEnum.ELECTRIC, ['asaba_harumasa'])
-    HOSHIMI_MIYABI = Agent('hoshimi_miyabi', '雅', RareTypeEnum.S, AgentTypeEnum.ANOMALY, DmgTypeEnum.ICE, ['hoshimi_miyabi'],
+    HOSHIMI_MIYABI = Agent('hoshimi_miyabi', '雅', RareTypeEnum.S, AgentTypeEnum.ANOMALY, DmgTypeEnum.ICE, ['hoshimi_miyabi', 'hoshimi_miyabi_dignified_blossom'],
                            state_list=[AgentStateDef('雅-落霜', AgentStateCheckWay.COLOR_RANGE_CONNECT,'hoshimi_miyabi',
                                                      hsv_color=(90,255,255), hsv_color_diff=(60,255,50), connect_cnt=5)])
 
