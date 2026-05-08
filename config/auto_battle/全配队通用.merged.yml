@@ -10597,7 +10597,6 @@
             "seconds": 4.2
             "state": "自定义-无视闪光"
           - "op_name": "设置状态"
-            "seconds": 4.2
             "state": "自定义-普罗米亚-长按中"
           - "op_name": "按键-普通攻击-松开"
           - "op_name": "等待秒数"
@@ -10633,11 +10632,24 @@
             - "自定义-无视闪光"
             - "自定义-动作不打断"
           "states": "[普罗米亚-霜刑]{2, 2}"
+        - "debug_name": "能量太多了"
+          "operations":
+          - "op_name": "设置状态"
+            "seconds": 2
+            "state": "自定义-动作不打断"
+          - "op_name": "按键-特殊攻击"
+            "post_delay": 0.2
+            "repeat": 10
+          - "op_name": "清除状态"
+            "state": "自定义-动作不打断"
+          "states": "[普罗米亚-能量]{110, 120}"
         - "debug_name": "普通攻击"
           "operations":
           - "op_name": "按键-普通攻击"
             "post_delay": 0.1
-            "repeat": 12
+            "repeat": 25
+          - "op_name": "设置状态"
+            "state": "自定义-合轴时间"
           "states": ""
       - "debug_name": "未知角色"
         "interrupt_states": "[前台-击破] | [前台-强攻] | [前台-支援] | [前台-防护] | [前台-异常] | [前台-命破]"
@@ -20022,7 +20034,6 @@
           "seconds": 4.2
           "state": "自定义-无视闪光"
         - "op_name": "设置状态"
-          "seconds": 4.2
           "state": "自定义-普罗米亚-长按中"
         - "op_name": "按键-普通攻击-松开"
         - "op_name": "等待秒数"
@@ -20058,11 +20069,24 @@
           - "自定义-无视闪光"
           - "自定义-动作不打断"
         "states": "[普罗米亚-霜刑]{2, 2}"
+      - "debug_name": "能量太多了"
+        "operations":
+        - "op_name": "设置状态"
+          "seconds": 2
+          "state": "自定义-动作不打断"
+        - "op_name": "按键-特殊攻击"
+          "post_delay": 0.2
+          "repeat": 10
+        - "op_name": "清除状态"
+          "state": "自定义-动作不打断"
+        "states": "[普罗米亚-能量]{110, 120}"
       - "debug_name": "普通攻击"
         "operations":
         - "op_name": "按键-普通攻击"
           "post_delay": 0.1
-          "repeat": 12
+          "repeat": 25
+        - "op_name": "设置状态"
+          "state": "自定义-合轴时间"
         "states": ""
     - "debug_name": "未知角色"
       "interrupt_states": "[前台-击破] | [前台-强攻] | [前台-支援] | [前台-防护] | [前台-异常] | [前台-命破]"
