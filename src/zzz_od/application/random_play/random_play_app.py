@@ -21,6 +21,7 @@ from zzz_od.application.random_play.random_play_config import (
 )
 from zzz_od.application.zzz_application import ZApplication
 from zzz_od.context.zzz_context import ZContext
+from zzz_od.controller.turn_compensation import AngleTurnCompensator
 from zzz_od.game_data.agent import Agent, AgentEnum
 from zzz_od.operation.back_to_normal_world import BackToNormalWorld
 from zzz_od.operation.transport import Transport
@@ -56,6 +57,7 @@ class RandomPlayApp(ZApplication):
         ]
         self._need_video_themes: list[str] = []
         self._current_idx: int = 0
+        self.turn_compensator = AngleTurnCompensator(self.ctx.controller)
 
     @operation_node(name='传送', is_start_node=True)
     def transport(self) -> OperationRoundResult:
@@ -79,7 +81,7 @@ class RandomPlayApp(ZApplication):
 
         angle_diff = cal_utils.angle_delta(current_angle, 0)
         if abs(angle_diff) > 2.0:
-            self.ctx.controller.turn_by_angle_diff(angle_diff)
+            self.turn_compensator.turn_from_angle(current_angle, angle_diff)
             return self.round_retry(status='转向正东', wait=0.5)
 
         self.ctx.controller.move_w(press=True, press_time=1, release=True)

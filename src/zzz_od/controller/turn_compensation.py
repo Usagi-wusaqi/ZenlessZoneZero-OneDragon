@@ -15,10 +15,15 @@ class AngleTurnCompensator:
         """创建一份独立的运行期补偿会话。"""
         self.controller: ZPcController = controller
         self.scale: float = 1.0
+        # 记录上一轮转向样本，等下一帧拿到新朝向后再学习
+        self.last_source_angle: float | None = None
+        self.last_effective_angle_diff: float | None = None
 
     def reset(self) -> None:
-        """清空补偿比例。"""
+        """清空补偿比例和上一轮转向样本。"""
         self.scale = 1.0
+        self.last_source_angle = None
+        self.last_effective_angle_diff = None
 
     def learn(self, source_angle: float, effective_angle_diff: float, current_angle: float) -> None:
         """用转向前后的朝向变化更新运行期补偿比例。"""
@@ -37,6 +42,14 @@ class AngleTurnCompensator:
         scale_change = effective_angle_diff / observed_angle_change - self.scale
         clipped_change = max(-self._MAX_SCALE_CHANGE, min(scale_change, self._MAX_SCALE_CHANGE))
         self.scale = max(self._MIN_SCALE, min(self.scale + clipped_change, self._MAX_SCALE))
+
+    def turn_from_angle(self, source_angle: float, angle_diff: float) -> float:
+        """用当前朝向学习上一轮，再下发本轮转向并记录样本。"""
+        if self.last_source_angle is not None and self.last_effective_angle_diff is not None:
+            self.learn(self.last_source_angle, self.last_effective_angle_diff, source_angle)
+        self.last_source_angle = source_angle
+        self.last_effective_angle_diff = self.turn(angle_diff)
+        return self.last_effective_angle_diff
 
     def turn(self, angle_diff: float, max_abs_angle_diff: float | None = None) -> float:
         """按当前补偿比例下发转向，返回实际下发角度。"""
