@@ -1,6 +1,6 @@
 import difflib
 import time
-from typing import ClassVar, List, Optional
+from typing import ClassVar
 
 import cv2
 import numpy as np
@@ -12,7 +12,7 @@ from one_dragon.base.operation.operation_edge import node_from
 from one_dragon.base.operation.operation_node import operation_node
 from one_dragon.base.operation.operation_notify import NotifyTiming, node_notify
 from one_dragon.base.operation.operation_round_result import OperationRoundResult
-from one_dragon.utils import cv2_utils, os_utils, str_utils
+from one_dragon.utils import cal_utils, cv2_utils, os_utils, str_utils
 from one_dragon.utils.i18_utils import gt
 from zzz_od.application.charge_plan import charge_plan_const
 from zzz_od.application.charge_plan.charge_plan_config import (
@@ -27,6 +27,7 @@ from zzz_od.application.coffee.coffee_config import (
 )
 from zzz_od.application.zzz_application import ZApplication
 from zzz_od.context.zzz_context import ZContext
+from zzz_od.controller.turn_compensation import AngleTurnCompensator
 from zzz_od.game_data.compendium import Coffee
 from zzz_od.operation.back_to_normal_world import BackToNormalWorld
 from zzz_od.operation.compendium.area_patrol import AreaPatrol
@@ -63,16 +64,17 @@ class CoffeeApp(ZApplication):
             group_id=application_const.DEFAULT_GROUP_ID,
         )
 
-        self.chosen_coffee: Optional[Coffee] = None  # 选择的咖啡
-        self.charge_plan: Optional[ChargePlanItem] = None  # 咖啡模拟生成的挑战计划
+        self.chosen_coffee: Coffee | None = None  # 选择的咖啡
+        self.charge_plan: ChargePlanItem | None = None  # 咖啡模拟生成的挑战计划
         self.had_coffee_list: set[str] = set()  # 已经喝过的咖啡
+        self.turn_compensator = AngleTurnCompensator(self.ctx.controller)
 
     def handle_init(self) -> None:
         """
         执行前的初始化 由子类实现
         注意初始化要全面 方便一个指令重复使用
         """
-        pass
+        self.turn_compensator.reset()
 
     @operation_node(name='传送', is_start_node=True)
     def transport(self) -> OperationRoundResult:
@@ -94,12 +96,25 @@ class CoffeeApp(ZApplication):
         return self.round_retry(status=result.status, wait=1)
 
     @node_from(from_name='等待大世界加载')
-    @operation_node(name='移动交互')
+    @operation_node(name='移动交互', node_max_retry_times=10)
     def move_and_interact(self) -> OperationRoundResult:
         """
-        传送之后 往前移动一下 方便交互
+        传送之后先将视角转向正西，再往前移动一下方便交互
         :return:
         """
+        mini_map = self.ctx.world_patrol_service.cut_mini_map(self.last_screenshot)
+        if not mini_map.play_mask_found:
+            return self.round_retry(status='未识别到小地图', wait=1)
+
+        current_angle = mini_map.view_angle
+        if current_angle is None:
+            return self.round_retry(status='识别朝向失败', wait=1)
+
+        angle_diff = cal_utils.angle_delta(current_angle, 180)
+        if abs(angle_diff) > 2.0:
+            self.turn_compensator.turn_from_angle(current_angle, angle_diff)
+            return self.round_retry(status='转向正西', wait=0.5)
+
         self.ctx.controller.move_w(press=True, press_time=1, release=True)
         time.sleep(1)
 
@@ -132,8 +147,8 @@ class CoffeeApp(ZApplication):
         to_ocr = cv2.bitwise_and(part, part, mask=cv2_utils.dilate(mask, 5))
 
         ocr_result_map = self.ctx.ocr.run_ocr(to_ocr)
-        ocr_result_list: List[str] = []
-        mrl_list: List[MatchResultList] = []
+        ocr_result_list: list[str] = []
+        mrl_list: list[MatchResultList] = []
         for ocr_result, mrl in ocr_result_map.items():
             ocr_result_list.append(ocr_result)
             mrl_list.append(mrl)
@@ -171,7 +186,7 @@ class CoffeeApp(ZApplication):
 
         return self.round_retry(status='没找到目标咖啡', wait=1)
 
-    def _get_coffee_to_choose(self, day: int) -> List[str]:
+    def _get_coffee_to_choose(self, day: int) -> list[str]:
         """
         获取需要选择的咖啡名称列表
         :return:
@@ -334,7 +349,7 @@ class CoffeeApp(ZApplication):
         if self.chosen_coffee.without_benefit:
             return self.round_fail('没有增益的咖啡')
 
-        coffee_plan: Optional[ChargePlanItem] = None
+        coffee_plan: ChargePlanItem | None = None
         for plan in self.charge_plan_config.plan_list:
             if self._is_coffee_for_plan(self.chosen_coffee, plan):
                 coffee_plan = plan

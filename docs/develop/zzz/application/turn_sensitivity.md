@@ -88,6 +88,7 @@ controller.move_mouse_relative(dx, dy)
 |------|------|------|------|------|
 | 锄大地 `world_patrol_run_route` | 角度型 `turn_by_angle_diff` | `turn_dx` + 运行时 `AngleTurnCompensator.scale` | `gamepad_turn_speed` | `scale` 只在本次运行中生效，不写配置 |
 | 录像店营业 `random_play_app` | 角度型 `turn_by_angle_diff` | `turn_dx` + 运行时 `AngleTurnCompensator.scale` | `gamepad_turn_speed` | 与锄大地共用补偿器实现，但会话独立 |
+| 咖啡店 `coffee_app` | 角度型 `turn_by_angle_diff` | `turn_dx` + 运行时 `AngleTurnCompensator.scale` | `gamepad_turn_speed` | 传送落地大世界后先转正西，会话独立 |
 | 迷失之地移动 `lost_void_move_by_det` | 像素型 `move_mouse_relative` | `estimated_turn_ratio` | `gamepad_turn_speed` | 主移动逻辑前台不走 `turn_dx` |
 | 式舆防卫战 `shiyu_defense_battle` | 像素型 `turn_by_distance` | 固定像素 `±50` / `±200` | `gamepad_turn_speed` | 前台主要不走 `turn_dx` |
 | 恶名狩猎靠近移动 `notorious_hunt_move` | 像素型 `turn_by_distance` | 固定像素 `±25/50/100` | `gamepad_turn_speed` | 前台不走 `turn_dx`，后台会吃手柄转速 |
@@ -109,9 +110,9 @@ controller.move_mouse_relative(dx, dy)
 
 `AngleTurnCompensator.scale` 使用反向观测增益更新：如果一轮命令角度实际转少了，后续会放大；如果实际转多了，后续会缩小。这个比例只在当前运行期内生效，不会写回 `game.yml`。
 
-### 5.2. 录像店营业
+### 5.2. 录像店营业与咖啡店
 
-录像店营业的“转向正东”是最纯粹的角度型转向。
+录像店营业的“转向正东”和咖啡店落地大世界后的“转向正西”都是固定方向的角度型转向。
 
 它也使用独立的 `AngleTurnCompensator` 会话；初始 `scale` 为 `1.0`，首次转向效果等价于直接调用 `turn_by_angle_diff(angle_diff)`，后续节点重试时会用新截图里的朝向观测微调。因此：
 
