@@ -86,7 +86,7 @@ controller.move_mouse_relative(dx, dy)
 
 | 模块 | 主要转向方式 | 前台键鼠依赖 | 后台手柄依赖 | 说明 |
 |------|------|------|------|------|
-| 锄大地 `world_patrol_run_route` | 角度型 `turn_by_angle_diff` | `turn_dx` + 运行时 `self.sensitivity` | `gamepad_turn_speed` | `self.sensitivity` 只在本次运行中生效，不写配置 |
+| 锄大地 `world_patrol_run_route` | 角度型 `turn_by_angle_diff` | `turn_dx` + 运行时 `AngleTurnCompensator.scale` | `gamepad_turn_speed` | `scale` 只在本次运行中生效，不写配置 |
 | 录像店营业 `random_play_app` | 角度型 `turn_by_angle_diff` | `turn_dx` | `gamepad_turn_speed` | 对未校准用户最敏感 |
 | 迷失之地移动 `lost_void_move_by_det` | 像素型 `move_mouse_relative` | `estimated_turn_ratio` | `gamepad_turn_speed` | 主移动逻辑前台不走 `turn_dx` |
 | 式舆防卫战 `shiyu_defense_battle` | 像素型 `turn_by_distance` | 固定像素 `±50` / `±200` | `gamepad_turn_speed` | 前台主要不走 `turn_dx` |
@@ -100,12 +100,14 @@ controller.move_mouse_relative(dx, dy)
 
 锄大地不是“只看 `turn_dx`”。
 
-它会先根据当前位置和目标点算出 `angle_diff`，然后在业务层引入一个运行时自适应比例 `self.sensitivity`，再交给控制器做角度转向。
+它会先根据当前位置和目标点算出 `angle_diff`，然后通过 `controller/turn_compensation.py` 里的 `AngleTurnCompensator` 引入运行时自适应比例，再交给控制器做角度转向。
 
 因此锄大地的前台转向效果由两部分共同决定：
 
 - 配置里的 `turn_dx`
-- 当前路线运行过程中逐步微调的 `self.sensitivity`
+- 当前路线运行过程中逐步微调的 `AngleTurnCompensator.scale`
+
+`AngleTurnCompensator.scale` 使用反向观测增益更新：如果一轮命令角度实际转少了，后续会放大；如果实际转多了，后续会缩小。这个比例只在当前运行期内生效，不会写回 `game.yml`。
 
 ### 5.2. 录像店营业
 
@@ -134,25 +136,3 @@ controller.move_mouse_relative(dx, dy)
 
 - 前台键鼠口径：不直接依赖 `turn_dx`
 - 后台手柄口径：会依赖 `gamepad_turn_speed`
-
-## 6. 排查建议
-
-### 6.1. 录像店连续卡在“转向正东”
-
-- 前台键鼠模式：
-  - 先看当前实例 `game.yml` 是否已经写入 `turn_dx`
-  - 再看是否运行过灵敏度校准
-- 后台手柄模式：
-  - 除了 `turn_dx`，还要看 `gamepad_turn_speed`
-
-### 6.2. 锄大地转向逐步变好
-
-这通常说明 `world_patrol_run_route` 内部的 `self.sensitivity` 在本次运行中做了自适应微调，不代表配置文件被修改。
-
-### 6.3. 迷失之地或式舆防卫战前台转向异常
-
-优先检查业务自己的像素级转向逻辑，不要先假设问题出在 `turn_dx`。
-
-### 6.4. 新增固定转向步骤
-
-如果新流程里调用的是 `turn_by_angle_diff(...)`，就必须显式考虑未校准用户的兜底方案。不要直接把其他游戏仓库里的 `turn_dx` 默认值搬到 ZZZ。

@@ -433,16 +433,17 @@ class WorldPatrolRunRoute(ZOperation):
             # 用上一轮转向前后的朝向变化，更新本次运行期的转向补偿比例
             self.turn_compensator.learn(self.last_angle, self.last_angle_diff_command, current_angle)
 
-        # 判断是否需要停下转向的角度阈值
-        need_turn = abs(angle_diff) > 2.0
-
-        if need_turn:
-            # 角度偏差大，点刹，再转向
+        effective_angle_diff = angle_diff * self.turn_compensator.scale
+        if abs(effective_angle_diff) > 90:
+            # 大角度先停下，避免移动中急转
             self.ctx.controller.stop_moving_forward()
-            calibrated_angle_diff = self.turn_compensator.turn(angle_diff)
+
+        if abs(effective_angle_diff) < 2:
+            # 小角度不转，避免在目标方向附近左右晃动
+            calibrated_angle_diff = 0
         else:
-            # 角度偏差小，直接在移动中微调
-            calibrated_angle_diff = self.turn_compensator.turn(angle_diff)
+            # 实际单轮下发最多 45 度
+            calibrated_angle_diff = self.turn_compensator.turn(angle_diff, max_abs_angle_diff=45)
 
         # 记录本次数据
         self.last_angle = current_angle

@@ -38,9 +38,11 @@ class AngleTurnCompensator:
         clipped_change = max(-self._MAX_SCALE_CHANGE, min(scale_change, self._MAX_SCALE_CHANGE))
         self.scale = max(self._MIN_SCALE, min(self.scale + clipped_change, self._MAX_SCALE))
 
-    def turn(self, angle_diff: float) -> float:
+    def turn(self, angle_diff: float, max_abs_angle_diff: float | None = None) -> float:
         """按当前补偿比例下发转向，返回实际下发角度。"""
         effective_angle_diff = angle_diff * self.scale
+        if max_abs_angle_diff is not None:
+            effective_angle_diff = max(-max_abs_angle_diff, min(effective_angle_diff, max_abs_angle_diff))
         self.controller.turn_by_angle_diff(effective_angle_diff)
         return effective_angle_diff
 
