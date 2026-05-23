@@ -80,11 +80,12 @@ class WorldPatrolApp(ZApplication):
                         if route.full_id in route_id_list
                     ]
         self.total_rounds = self.config.daily_loop_count
-        self.current_round = 1
-        # 启动时仅重置本轮的时间字段，保留 run_record.finished 以支持日内续跑
-        self.world_patrol_round_start_time = None
-        self.round_wait_seconds = 0.0
-        self.round_wait_start_time = None
+        # 基于当日已完成轮数计算起始轮次，使重启任务能从下一轮继续
+        self.current_round = self.run_record.completed_rounds + 1
+        # 仅清本轮的计时字段，保留 finished 以支持任务中途停止后的续跑
+        self._reset_round_timing()
+        if self.current_round > self.total_rounds:
+            log.info(f'锄大地当日已完成 {self.run_record.completed_rounds}/{self.total_rounds} 轮，无需再跑')
         return self.round_success(status=f'加载路线 {len(self.route_list)}')
 
     @node_from(from_name='初始化')
@@ -131,6 +132,10 @@ class WorldPatrolApp(ZApplication):
     @node_notify(when=NotifyTiming.CURRENT_DONE, detail=True)
     @operation_node(name='执行路线')
     def run_route(self) -> OperationRoundResult:
+        # 当日已完成的轮数已达上限，直接走「全部完成」分支
+        if self.current_round > self.total_rounds:
+            return self.round_success(status='路线已全部完成')
+
         # 轮次首次进入：记录起始时间并打印开场日志
         if self.world_patrol_round_start_time is None:
             self.world_patrol_round_start_time = time.monotonic()
@@ -212,7 +217,19 @@ class WorldPatrolApp(ZApplication):
     @node_from(from_name='执行路线', status='路线已全部完成')
     @operation_node(name='轮次结束判定')
     def decide_next_round(self) -> OperationRoundResult:
-        """一轮路线跑完后的分流：已是最后一轮直接结束，否则按配置间隔算出本轮还需等待的秒数。"""
+        """一轮路线跑完后的分流：
+
+        - 当日已完成轮数已满 → 直接结束，本次不计入完成数
+        - 本轮是最后一轮 → 计入当日已完成轮数后结束
+        - 还有下一轮 → 计入当日已完成轮数后按配置间隔算出还要等多久
+        """
+        if self.current_round > self.total_rounds:
+            log.info(f'锄大地当日已完成 {self.run_record.completed_rounds}/{self.total_rounds} 轮，无需再跑')
+            return self.round_success(status='全部完成')
+
+        # 本轮真实跑完，加入当日已完成轮数
+        self.run_record.inc_completed_rounds()
+
         if self.current_round >= self.total_rounds:
             log.info(f'锄大地全部循环已完成 共 {self.total_rounds} 轮')
             return self.round_success(status='全部完成')
@@ -251,10 +268,14 @@ class WorldPatrolApp(ZApplication):
         self.current_round += 1
         self.route_idx = 0
         self.run_record.reset_finished()
+        self._reset_round_timing()
+        return self.round_success(status='进入下一轮')
+
+    def _reset_round_timing(self) -> None:
+        """重置本轮的计时字段，不影响 finished、completed_rounds 等持久化记录。"""
         self.world_patrol_round_start_time = None
         self.round_wait_seconds = 0.0
         self.round_wait_start_time = None
-        return self.round_success(status='进入下一轮')
 
     def _stop_route_actions(self) -> None:
         self.ctx.auto_battle_context.stop_auto_battle()
