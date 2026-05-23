@@ -79,6 +79,13 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         )
         layout.addWidget(self.route_retry_times_opt)
 
+        self.daily_loop_count_opt = SpinBoxSettingCard(
+            icon=FluentIcon.CALENDAR,
+            title='锄地每日循环次数',
+            content='一次任务执行内总共执行的轮数',
+        )
+        layout.addWidget(self.daily_loop_count_opt)
+
         layout.addStretch(1)
         return widget
 
@@ -113,6 +120,15 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
             content='路线脱困失败，重试后再次卡住时的处理方式',
         )
         layout.addWidget(self.route_retry_action_opt)
+
+        self.loop_interval_seconds_opt = SpinBoxSettingCard(
+            icon=FluentIcon.QUIET_HOURS,
+            title='每轮最少占用时长',
+            content='每轮跑完：不足则补等到该秒数，超过则立即开始下一轮',
+            minimum=0,
+            maximum=86400,
+        )
+        layout.addWidget(self.loop_interval_seconds_opt)
 
         layout.addStretch(1)
         return widget
@@ -163,6 +179,9 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
             ]
         )
         self.route_retry_action_opt.init_with_adapter(get_prop_adapter(self.config, 'route_retry_action'))
+
+        self.daily_loop_count_opt.init_with_adapter(get_prop_adapter(self.config, 'daily_loop_count'))
+        self.loop_interval_seconds_opt.init_with_adapter(get_prop_adapter(self.config, 'loop_interval_seconds'))
 
     def _on_reset_record_clicked(self) -> None:
         if self.run_record is None:
