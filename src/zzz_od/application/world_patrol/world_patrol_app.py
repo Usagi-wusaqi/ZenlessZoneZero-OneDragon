@@ -247,6 +247,13 @@ class WorldPatrolApp(ZApplication):
         return self.round_success(status='进入轮间等待')
 
     @node_from(from_name='轮次结束判定', status='进入轮间等待')
+    @operation_node(name='传送回录像店')
+    def goto_video_shop(self) -> OperationRoundResult:
+        """轮间等待前先离开野怪刷新点，离开勘域以避免怪物刷新后攻击我们。"""
+        op = BackToNormalWorld(self.ctx, ensure_normal_world=True)
+        return self.round_by_op_result(op.execute())
+
+    @node_from(from_name='传送回录像店')
     @operation_node(name='轮间等待')
     def wait_between_rounds(self) -> OperationRoundResult:
         """以 1 秒为粒度轮询等待，借助 round_wait 让暂停/停止信号能及时响应。"""
