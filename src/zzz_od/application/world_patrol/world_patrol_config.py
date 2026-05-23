@@ -64,3 +64,19 @@ class WorldPatrolConfig(ApplicationConfig):
     @route_retry_action.setter
     def route_retry_action(self, new_value: str) -> None:
         self.update('route_retry_action', new_value)
+
+    @property
+    def daily_loop_count(self) -> int:
+        return int(self.get('daily_loop_count', 1))
+
+    @daily_loop_count.setter
+    def daily_loop_count(self, new_value: int) -> None:
+        self.update('daily_loop_count', new_value)
+
+    @property
+    def loop_interval_seconds(self) -> int:
+        return int(self.get('loop_interval_seconds', 1800))
+
+    @loop_interval_seconds.setter
+    def loop_interval_seconds(self, new_value: int) -> None:
+        self.update('loop_interval_seconds', new_value)
