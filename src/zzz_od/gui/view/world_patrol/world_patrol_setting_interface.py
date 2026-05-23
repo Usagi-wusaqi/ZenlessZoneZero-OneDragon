@@ -72,12 +72,12 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         )
         layout.addWidget(self.ui_disappear_seconds_opt)
 
-        self.ui_disappear_action_opt = ComboBoxSettingCard(
-            icon=FluentIcon.SETTING,
-            title='界面消失处理方式',
-            content='判定为疑似卡电梯后的处理方式',
+        self.route_retry_times_opt = SpinBoxSettingCard(
+            icon=FluentIcon.SYNC,
+            title='单条路线重试上限',
+            content='任何原因卡住的最多重试次数，超限后跳过该条小路线',
         )
-        layout.addWidget(self.ui_disappear_action_opt)
+        layout.addWidget(self.route_retry_times_opt)
 
         layout.addStretch(1)
         return widget
@@ -100,12 +100,12 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         self.route_list_opt = ComboBoxSettingCard(icon=FluentIcon.SEARCH, title='路线名单')
         layout.addWidget(self.route_list_opt)
 
-        self.route_retry_times_opt = SpinBoxSettingCard(
-            icon=FluentIcon.SYNC,
-            title='单条路线重试上限',
-            content='任何原因卡住的最多重试次数，超限后跳过该条小路线',
+        self.ui_disappear_action_opt = ComboBoxSettingCard(
+            icon=FluentIcon.SETTING,
+            title='界面消失处理方式',
+            content='判定为疑似卡电梯后的处理方式',
         )
-        layout.addWidget(self.route_retry_times_opt)
+        layout.addWidget(self.ui_disappear_action_opt)
 
         layout.addStretch(1)
         return widget
