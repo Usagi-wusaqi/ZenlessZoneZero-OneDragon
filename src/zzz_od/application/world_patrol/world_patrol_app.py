@@ -160,7 +160,15 @@ class WorldPatrolApp(ZApplication):
                 return self.round_wait(status=f'界面消失已重开游戏并跳过路线 {route.full_id}')
 
             if _is_stuck_over_limit_status(result.status):
-                if attempt_idx < retry_times:
+                # 首次卡住总是重试一次进入"重试状态"
+                if attempt_idx == 0:
+                    attempt_idx += 1
+                    continue
+                # 已在重试状态：按用户选择决定是否继续脱困
+                if (
+                    self.config.route_retry_action == WorldPatrolConfig.ROUTE_RETRY_ACTION_RETRY
+                    and attempt_idx < retry_times
+                ):
                     attempt_idx += 1
                     continue
 

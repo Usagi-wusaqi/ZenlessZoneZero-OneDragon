@@ -61,7 +61,7 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         self.help_opt = HelpCard(url='https://one-dragon.com/zzz/zh/feat_one_dragon/world_patrol.html')
         layout.addWidget(self.help_opt)
 
-        self.auto_battle_opt = ComboBoxSettingCard(icon=FluentIcon.SEARCH, title='自动战斗')
+        self.auto_battle_opt = ComboBoxSettingCard(icon=FluentIcon.GAME, title='自动战斗')
         layout.addWidget(self.auto_battle_opt)
 
         self.ui_disappear_seconds_opt = SpinBoxSettingCard(
@@ -75,7 +75,7 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         self.route_retry_times_opt = SpinBoxSettingCard(
             icon=FluentIcon.SYNC,
             title='单条路线重试上限',
-            content='任何原因卡住的最多重试次数，超限后跳过该条小路线',
+            content='单条路线累计重试次数，超限后跳过该路线',
         )
         layout.addWidget(self.route_retry_times_opt)
 
@@ -90,22 +90,29 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         widget.setLayout(layout)
 
         self.run_record_opt = PushSettingCard(
-            icon=FluentIcon.SYNC,
+            icon=FluentIcon.HISTORY,
             title='运行记录',
             text='重置记录'
         )
         self.run_record_opt.clicked.connect(self._on_reset_record_clicked)
         layout.addWidget(self.run_record_opt)
 
-        self.route_list_opt = ComboBoxSettingCard(icon=FluentIcon.SEARCH, title='路线名单')
+        self.route_list_opt = ComboBoxSettingCard(icon=FluentIcon.MENU, title='路线名单')
         layout.addWidget(self.route_list_opt)
 
         self.ui_disappear_action_opt = ComboBoxSettingCard(
-            icon=FluentIcon.SETTING,
+            icon=FluentIcon.POWER_BUTTON,
             title='界面消失处理方式',
             content='判定为疑似卡电梯后的处理方式',
         )
         layout.addWidget(self.ui_disappear_action_opt)
+
+        self.route_retry_action_opt = ComboBoxSettingCard(
+            icon=FluentIcon.ROTATE,
+            title='路线重试处理方式',
+            content='路线脱困失败，重试后再次卡住时的处理方式',
+        )
+        layout.addWidget(self.route_retry_action_opt)
 
         layout.addStretch(1)
         return widget
@@ -148,6 +155,14 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         self.ui_disappear_seconds_opt.init_with_adapter(get_prop_adapter(self.config, 'ui_disappear_seconds'))
 
         self.route_retry_times_opt.init_with_adapter(get_prop_adapter(self.config, 'route_retry_times'))
+
+        self.route_retry_action_opt.set_options_by_list(
+            [
+                ConfigItem('若再次卡住则跳过脱困', WorldPatrolConfig.ROUTE_RETRY_ACTION_SKIP),
+                ConfigItem('若再次卡住仍尝试脱困', WorldPatrolConfig.ROUTE_RETRY_ACTION_RETRY),
+            ]
+        )
+        self.route_retry_action_opt.init_with_adapter(get_prop_adapter(self.config, 'route_retry_action'))
 
     def _on_reset_record_clicked(self) -> None:
         if self.run_record is None:
