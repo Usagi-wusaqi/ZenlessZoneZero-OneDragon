@@ -101,6 +101,7 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
             title='运行记录',
             text='重置记录'
         )
+        self.run_record_opt.setFixedHeight(50)
         self.run_record_opt.clicked.connect(self._on_reset_record_clicked)
         layout.addWidget(self.run_record_opt)
 
@@ -123,7 +124,7 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
 
         self.loop_interval_seconds_opt = SpinBoxSettingCard(
             icon=FluentIcon.QUIET_HOURS,
-            title='每轮最少占用时长',
+            title='每轮最少占用时长（敌人刷新时间）',
             content='每轮跑完：不足则补等到该秒数，超过则立即开始下一轮',
             minimum=0,
             maximum=86400,
@@ -183,9 +184,24 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         self.daily_loop_count_opt.init_with_adapter(get_prop_adapter(self.config, 'daily_loop_count'))
         self.loop_interval_seconds_opt.init_with_adapter(get_prop_adapter(self.config, 'loop_interval_seconds'))
 
+        self._update_run_record_display()
+
+    def _update_run_record_display(self) -> None:
+        """刷新「运行记录」卡片的副标题，显示当日进度。"""
+        if self.run_record is None:
+            return
+        total = self.config.daily_loop_count if self.config is not None else 1
+        # 当日已完成的整数轮数 + 当前轮已完成路线占整轮的小数部分
+        per_round = self.run_record.routes_per_round
+        partial = len(self.run_record.finished) / per_round if per_round > 0 else 0.0
+        progress = self.run_record.completed_rounds + partial
+        content = f'当日进度 {progress:.2f}/{total}'
+        self.run_record_opt.setContent(content)
+
     def _on_reset_record_clicked(self) -> None:
         if self.run_record is None:
             log.warning('运行记录未初始化')
             return
         self.run_record.reset_record()
         log.info('已重置记录')
+        self._update_run_record_display()

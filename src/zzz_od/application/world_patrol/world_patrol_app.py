@@ -80,6 +80,7 @@ class WorldPatrolApp(ZApplication):
                         if route.full_id in route_id_list
                     ]
         self.total_rounds = self.config.daily_loop_count
+        self.run_record.set_routes_per_round(len(self.route_list))
         # 基于当日已完成轮数计算起始轮次，使重启任务能从下一轮继续
         self.current_round = self.run_record.completed_rounds + 1
         # 仅清本轮的计时字段，保留 finished 以支持任务中途停止后的续跑
