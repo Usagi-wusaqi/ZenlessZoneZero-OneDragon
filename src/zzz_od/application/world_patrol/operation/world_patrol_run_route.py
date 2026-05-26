@@ -281,8 +281,7 @@ class WorldPatrolRunRoute(ZOperation):
             mini_map,
             possible_rect,
         )
-        if not self._is_next_pos_valid(next_pos):
-            log.info(f'计算坐标偏移较大 舍弃 {next_pos}')
+        if next_pos is not None and not self._is_next_pos_valid(next_pos, move_distance):
             next_pos = None
 
         if next_pos is None:
@@ -316,26 +315,25 @@ class WorldPatrolRunRoute(ZOperation):
             self.current_pos = next_pos
             return None
 
-    def _is_next_pos_valid(self, next_pos: Point | None) -> bool:
-        if next_pos is None:
-            return False
+    def _is_next_pos_valid(self, next_pos: Point, move_distance: float) -> bool:
         """
         判断匹配的下一个坐标是否合法
         1. 距离检查：防止基准点错误导致的大幅跳跃
         2. 角度检查：根据上一坐标、朝向、转向等判断方向是否合理
         Args:
             next_pos: 匹配的坐标
+            move_distance: 本帧允许的合理位移上限
         Returns:
             bool: True 表示坐标合法，False 表示坐标非法
         """
-        # 距离检查：如果距离过大（超过合理移动范围），直接拒绝
-        # 假设最大移动速度 50 单位/秒，0.3秒一轮，最大移动 15 单位
-        # 加上容错，设置为 100 单位（约 2 秒的移动距离）
-        distance = cal_utils.distance_between(self.current_pos, next_pos)
-        if distance > 100:
+        pos_distance = cal_utils.distance_between(self.current_pos, next_pos)
+        if pos_distance > move_distance:
+            log.info(f'坐标跳变过大 舍弃 {next_pos} 距离 {pos_distance:.1f} 允许 {move_distance:.1f}')
             return False
-
-        return self._is_next_pos_in_angle_range(next_pos)
+        if not self._is_next_pos_in_angle_range(next_pos):
+            log.info(f'坐标方向偏离 舍弃 {next_pos}')
+            return False
+        return True
 
     def _is_next_pos_in_angle_range(self, next_pos: Point) -> bool:
         """
