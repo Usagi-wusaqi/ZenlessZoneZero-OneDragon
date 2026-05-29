@@ -193,8 +193,9 @@ class WorldPatrolSettingInterface(VerticalScrollInterface, GroupIdMixin):
         total = self.config.daily_loop_count if self.config is not None else 1
         # 当日已完成的整数轮数 + 当前轮已完成路线占整轮的小数部分
         per_round = self.run_record.routes_per_round
-        partial = len(self.run_record.finished) / per_round if per_round > 0 else 0.0
-        progress = self.run_record.completed_rounds + partial
+        # finished 满额代表该轮已结束并已计入 completed_rounds，取模避免与整轮重复计数
+        partial = (len(self.run_record.finished) % per_round) / per_round if per_round > 0 else 0.0
+        progress = min(self.run_record.completed_rounds + partial, total)
         content = f'当日进度 {progress:.2f}/{total}'
         self.run_record_opt.setContent(content)
 
