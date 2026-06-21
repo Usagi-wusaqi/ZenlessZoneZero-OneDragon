@@ -87,36 +87,34 @@ class ChargePlanApp(ZApplication):
     @node_from(from_name='打开快捷手册')
     @operation_node(name='识别电量')
     def check_battery_charge(self) -> OperationRoundResult:
-        area = self.ctx.screen_loader.get_area('快捷手册', '资源栏')
-        ocr_result_list = self.ctx.ocr_service.get_ocr_result_list(
-            self.last_screenshot,
-            rect=area.rect,
+        battery_charge_text = self.ctx.ocr.run_ocr_single_line(
+            cv2_utils.crop_image_only(self.last_screenshot, self.ctx.screen_loader.get_area('快捷手册', '电量').rect)
         )
-        resource_list = sorted(
-            [i for i in ocr_result_list if str_utils.get_positive_digits(i.data, None) is not None],
-            key=lambda i: i.center.x,
+        backup_battery_charge_text = self.ctx.ocr.run_ocr_single_line(
+            cv2_utils.crop_image_only(self.last_screenshot, self.ctx.screen_loader.get_area('快捷手册', '储蓄电量').rect)
         )
-        log.debug('快捷手册资源栏 OCR %s', [(i.data, i.x, i.y, i.w, i.h) for i in resource_list])
-        if len(resource_list) != 3:
-            return self.round_retry('未识别到电量', wait=1)
-
-        charge_text = resource_list[0].data
-        charge_match = re.search(r'(\d+)\s*/\s*(\d+)', charge_text)
-        if charge_match is not None:
-            battery_charge = int(charge_match.group(1))
+        ether_battery_text = self.ctx.ocr.run_ocr_single_line(
+            cv2_utils.crop_image_only(self.last_screenshot, self.ctx.screen_loader.get_area('快捷手册', '以太电池').rect)
+        )
+        log.debug('快捷手册资源栏 OCR 剩余电量=%s 储蓄电量=%s 以太电池=%s', battery_charge_text, backup_battery_charge_text, ether_battery_text)
+        battery_charge_match = re.search(r'(\d+)\s*/\s*(\d+)', battery_charge_text)
+        if battery_charge_match is not None:
+            battery_charge = int(battery_charge_match.group(1))
         else:
-            charge_suffix = str(ChargePlanRunRecord.MAX_CHARGE_POWER)
-            battery_charge_text = re.sub(r'\D', '', charge_text).removesuffix(charge_suffix)
-            battery_charge_text = battery_charge_text.removesuffix('1')
+            battery_charge_suffix = str(ChargePlanRunRecord.MAX_CHARGE_POWER)
+            battery_charge_digit_text = re.sub(r'\D', '', battery_charge_text).removesuffix(battery_charge_suffix)
+            battery_charge_digit_text = battery_charge_digit_text.removesuffix('1')
 
-            battery_charge = str_utils.get_positive_digits(battery_charge_text, None)
+            battery_charge = str_utils.get_positive_digits(battery_charge_digit_text, None)
             if battery_charge is None:
                 return self.round_retry('未识别到电量', wait=1)
 
-        backup_battery_charge = str_utils.get_positive_digits(resource_list[1].data, None)
-        ether_battery = str_utils.get_positive_digits(resource_list[2].data, None)
-        if backup_battery_charge is None or ether_battery is None:
-            return self.round_retry('未识别到电量', wait=1)
+        backup_battery_charge = str_utils.get_positive_digits(backup_battery_charge_text, None)
+        ether_battery = str_utils.get_positive_digits(ether_battery_text, None)
+        if backup_battery_charge is None:
+            return self.round_retry('未识别到储蓄电量', wait=1)
+        if ether_battery is None:
+            return self.round_retry('未识别到以太电池', wait=1)
 
         self.battery_charge = battery_charge
         self.backup_battery_charge = backup_battery_charge
