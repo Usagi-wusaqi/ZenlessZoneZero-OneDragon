@@ -44,8 +44,8 @@ class HouHouBakeryApp(ZApplication):
     def move_and_interact(self) -> OperationRoundResult:
         """传送之后与吼吼先生交互, 打开领奖界面。传送点已足够近, 无需前移。"""
         # self.ctx.controller.move_w(press=True, press_time=1, release=True)
-        # time.sleep(1)
 
+        time.sleep(1) # 防止交互无效 issue #2405 #2395 #2328
         self.ctx.controller.interact(press=True, press_time=0.2, release=True)
         time.sleep(3)
 

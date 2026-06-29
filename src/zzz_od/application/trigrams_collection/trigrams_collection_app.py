@@ -38,8 +38,8 @@ class TrigramsCollectionApp(ZApplication):
         :return:
         """
         # self.ctx.controller.move_w(press=True, press_time=1, release=True)
-        # time.sleep(1)
 
+        time.sleep(1) # 防止交互无效 issue #2405 #2395 #2328
         self.ctx.controller.interact(press=True, press_time=0.2, release=True)
         time.sleep(3)
 
