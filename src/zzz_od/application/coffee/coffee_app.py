@@ -126,6 +126,7 @@ class CoffeeApp(ZApplication):
 
         if self.config.transport_point == CoffeeTransportPoint.POINT_2.value.value:
             return self.round_success(status='对话点单')
+
         return self.round_success()
 
     @node_from(from_name='移动交互')
