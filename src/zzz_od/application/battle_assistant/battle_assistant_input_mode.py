@@ -30,4 +30,5 @@ def apply_battle_assistant_input_mode(ctx: ZContext) -> tuple[bool, str]:
         return True, '后台模式-Xbox'
 
     ctx.controller.enable_foreground_mode()
+    ctx.controller.active_window()
     return True, '前台模式-键鼠'
