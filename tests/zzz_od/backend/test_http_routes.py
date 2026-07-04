@@ -14,6 +14,7 @@ from zzz_od.backend.backend_context import BackendNotReadyError
 from zzz_od.backend.http.routes import (
     handle_game_analyze,
     handle_game_capture,
+    handle_game_close,
     handle_game_enter,
     handle_game_window,
 )
@@ -68,13 +69,68 @@ async def test_handle_game_analyze_ok() -> None:
 
 
 @pytest.mark.asyncio
-async def test_handle_game_enter_ok() -> None:
-    """handle_game_enter 应以 200 返回 enter_game 的结果字符串。"""
+async def test_handle_game_analyze_returns_screens() -> None:
+    """HTTP /game/analyze 返回 JSON 含 screens 嵌套;area_type 经 asdict+json 序列化为 'text'。"""
+    from one_dragon.base.screen.screen_match import (
+        AreaMatchDetail,
+        AreaType,
+        ScreenMatch,
+    )
+
+    detail = AreaMatchDetail(
+        area_name='标题', area_type=AreaType.TEXT,
+        x=1, y=1, width=1, height=1, text='菜单', confidence=0.9,
+    )
+    match = ScreenMatch(screen_name='菜单', is_precise=True, areas=[detail])
     backend = MagicMock()
-    backend.enter_game.return_value = "成功打开并进入绝区零游戏"
-    resp = await handle_game_enter(backend)
+    backend.analyze.return_value = AnalyzeScreenResult(
+        success=True, ocr_texts=[], error=None, screens=[match])
+    resp = await handle_game_analyze(backend)  # _request 默认 None,处理器不读 request
     assert resp.status_code == 200
-    assert "成功" in resp.body.decode("utf-8")
+    body = json.loads(resp.body.decode('utf-8'))
+    assert body['success'] is True
+    assert body['screens'][0]['screen_name'] == '菜单'
+    # str Enum 经 asdict 保 Enum 对象、json.dumps 序列化为 'text';与 AreaType.TEXT('text') 相等
+    assert body['screens'][0]['areas'][0]['area_type'] == AreaType.TEXT
+
+
+@pytest.mark.asyncio
+async def test_handle_game_enter_ok() -> None:
+    """handle_game_enter 应委托 backend.start_run，返回 started/result JSON。
+
+    block=true（默认）且 start_run 返回 (True, 已完成 Future) 时，
+    响应体应包含 result 文本（success → 「成功打开并进入绝区零游戏」）。
+    """
+    from concurrent.futures import Future
+    from dataclasses import dataclass
+
+    from zzz_od.backend.schemas import RunStatusResult
+
+    @dataclass
+    class _FakeRequest:
+        query_params: dict
+
+        async def json(self) -> dict:
+            return {}
+
+    @dataclass
+    class _OpResult:
+        success: bool
+        status: str = ""
+
+    fut: Future = Future()
+    fut.set_result(_OpResult(success=True))
+    backend = MagicMock()
+    backend.start_run.return_value = (True, fut)
+    backend.query_status.return_value = RunStatusResult(
+        state="running", source="http", app="OpenAndEnterGame",
+        started_at="2026-07-02T00:00:00", duration_seconds=1.0,
+    )
+    resp = await handle_game_enter(backend, _FakeRequest({}))
+    assert resp.status_code == 200
+    data = json.loads(resp.body.decode("utf-8"))
+    assert data["result"] == "成功打开并进入绝区零游戏"
+    backend.start_run.assert_called_once()
 
 
 def test_register_http_routes_adds_custom_routes() -> None:
@@ -89,6 +145,43 @@ def test_register_http_routes_adds_custom_routes() -> None:
     app = mcp.streamable_http_app()
     paths = {getattr(r, "path", None) for r in app.routes}
     assert any(p and "game" in p for p in paths)
+
+
+@pytest.mark.asyncio
+async def test_handle_game_close_ok() -> None:
+    """handle_game_close 在就绪时应以 200 返回 backend.close_game() 文本。"""
+    backend = MagicMock()
+    backend.close_game.return_value = "已发送关闭游戏信号,可用 check_game_window 验证"
+    resp = await handle_game_close(backend)
+    assert resp.status_code == 200
+    data = json.loads(resp.body.decode("utf-8"))
+    assert data["result"] == "已发送关闭游戏信号,可用 check_game_window 验证"
+
+
+@pytest.mark.asyncio
+async def test_handle_game_close_error() -> None:
+    """handle_game_close 在 backend 未就绪时应返回 503。"""
+    backend = MagicMock()
+    backend.close_game.side_effect = BackendNotReadyError("未就绪")
+    resp = await handle_game_close(backend)
+    assert resp.status_code == 503
+
+
+def test_route_dispatch_game_close_ok() -> None:
+    """经路由层分发 POST /game/close,应返回 200 + result 文本。"""
+    from mcp.server.fastmcp import FastMCP
+    from starlette.testclient import TestClient
+
+    from zzz_od.backend.http.routes import register_http_routes
+
+    mcp = FastMCP("test")
+    backend = MagicMock()
+    backend.close_game.return_value = "已发送关闭游戏信号,可用 check_game_window 验证"
+    register_http_routes(mcp, backend)
+    client = TestClient(mcp.streamable_http_app())
+    resp = client.post("/game/close")
+    assert resp.status_code == 200
+    assert resp.json()["result"] == "已发送关闭游戏信号,可用 check_game_window 验证"
 
 
 def test_route_dispatch_window_ok() -> None:
