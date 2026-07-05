@@ -18,10 +18,12 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from one_dragon.base.operation.operation_base import OperationResult
 from one_dragon.base.screen.screen_match import find_screen_matches
+from one_dragon.utils import cv2_utils, debug_utils
 from zzz_od.backend.schemas import (
     AnalyzeScreenResult,
     OcrText,
@@ -282,27 +284,55 @@ class ZzzBackendContext:
             raise BackendNotReadyError('截图返回 None')
         return image
 
-    def analyze(self) -> AnalyzeScreenResult:
-        """分析游戏画面:截图 + 全图 OCR + 画面匹配(精准/模糊)。
+    @staticmethod
+    def _resolve_screenshot(screenshot: str) -> 'tuple[MatLike | None, str]':
+        """把 screenshot(绝对路径或 debug 图名)解析为(图像, 解析后完整路径)。
 
-        精准命中(``screens[0].is_precise=True``)后回写
-        ``ctx.screen_loader.update_current_screen_name``,为下次 BFS 提供起点;
-        模糊 / 异常不回写。
+        绝对路径按路径读;否则当 ``.debug/images`` 下的 debug 图名,自动补 ``.png``。
+        图像读不到时返回 ``(None, 解析后路径)``,由调用方报错。
 
-        对外无副作用(MCP tool annotations readOnly —— 回写的是 ctx 内存识别状态,
-        非外部资源)。Python GIL 下并发回写容忍(见 spec §2.3,无内存撕裂,
-        逻辑竞态由 BFS 全量兜底吸收)。
+        Args:
+            screenshot: 截图绝对路径,或 ``.debug/images`` 下的图名(不带后缀)。
+
+        Returns:
+            (image, resolved_path):image 为 RGB ndarray,文件不存在/不可读时为 None。
+        """
+        if Path(screenshot).is_absolute():
+            resolved = screenshot
+        else:
+            resolved = debug_utils.get_debug_image_path(screenshot)
+        return cv2_utils.read_image(resolved), resolved
+
+    def analyze(self, screenshot: str | None = None) -> AnalyzeScreenResult:
+        """分析画面:截图 + 全图 OCR + 画面匹配(精准/模糊)。
+
+        screenshot 省略 → 截当前游戏画面(需游戏窗口就绪);精准命中回写
+        ``ctx.screen_loader.update_current_screen_name``,为下次 BFS 提供起点。
+        screenshot 传入 → 解析指定截图,**无需游戏窗口就绪**:绝对路径按路径读,
+        纯名字到 ``.debug/images/<名字>.png`` 读;读不到返失败(error 带解析后完整路径)。
+        **不回写**识别状态(离线 / 可能是旧图,不污染实时识别)。
+
+        Args:
+            screenshot: 截图绝对路径,或 ``.debug/images`` 下的图名(不带后缀);
+                None 表示实时截当前画面。
 
         Returns:
             分析结果:成功标志、OCR 文本列表、画面匹配列表、错误描述。
         """
         self._ensure_ready()
-        controller = self._ctx.controller
-        if controller is None or not controller.is_game_window_ready:
-            return AnalyzeScreenResult(success=False, ocr_texts=[], screens=[], error='游戏窗口未就绪')
-        image = controller.get_screenshot(independent=False)
-        if image is None:
-            return AnalyzeScreenResult(success=False, ocr_texts=[], screens=[], error='截图失败')
+        if screenshot is None:
+            controller = self._ctx.controller
+            if controller is None or not controller.is_game_window_ready:
+                return AnalyzeScreenResult(success=False, ocr_texts=[], screens=[], error='游戏窗口未就绪')
+            image = controller.get_screenshot(independent=False)
+            if image is None:
+                return AnalyzeScreenResult(success=False, ocr_texts=[], screens=[], error='截图失败')
+            write_back = True
+        else:
+            image, resolved = self._resolve_screenshot(screenshot)
+            if image is None:
+                return AnalyzeScreenResult(success=False, ocr_texts=[], screens=[], error=f'读取截图失败: {resolved}')
+            write_back = False
         try:
             # crop_first=False:与下方 find_screen_matches 内 find_area_with_detail(color_range=None)复用
             # 同一份全图 OCR 缓存(cache key 含 crop_first;True/False 不复用会触发两次全图 OCR)。
@@ -313,10 +343,10 @@ class ZzzBackendContext:
                 for r in ocr_result_list
             ]
             screens = find_screen_matches(self._ctx, image)
-            if screens and screens[0].is_precise:
+            if write_back and screens and screens[0].is_precise:
                 self._ctx.screen_loader.update_current_screen_name(screens[0].screen_name)
             return AnalyzeScreenResult(success=True, ocr_texts=ocr_texts, screens=screens, error=None)
-        except Exception as e:  # noqa: BLE001 OCR/匹配异常兜底:不回写,返失败(对齐 spec §2.3;OCR 也纳入兜底更稳,调用方统一见 error 字段)
+        except Exception as e:  # noqa: BLE001 OCR/匹配异常兜底:不回写,返失败
             return AnalyzeScreenResult(success=False, ocr_texts=[], screens=[], error=str(e))
 
     def close_game(self) -> str:
