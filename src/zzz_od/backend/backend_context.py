@@ -21,6 +21,7 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from one_dragon.base.geometry.point import Point
 from one_dragon.base.geometry.rectangle import Rect
 from one_dragon.base.operation.operation_base import OperationResult
 from one_dragon.base.screen.screen_area import ScreenArea
@@ -485,6 +486,29 @@ class ZzzBackendContext:
             raise BackendNotReadyError('游戏窗口未就绪')
         controller.close_game()
         return '已发送关闭游戏信号,可用 check_game_window 验证'
+
+    def click_game(self, x: int | float, y: int | float, press_time: float = 0.0) -> dict:
+        """点击游戏窗口内指定坐标(1080p 游戏空间,同源 screen_info pc_rect)。操作类。
+
+        坐标经控制器自动缩放到真实屏幕。坐标不在游戏窗口内时控制器返 False(不点击)。
+
+        Args:
+            x, y: 默认分辨率(1920×1080)下的游戏窗口坐标。
+            press_time: >0 时长按若干秒。
+
+        Returns:
+            ``{success, x, y, in_window}``:``success/in_window=False`` 表示坐标不在窗口内。
+
+        Raises:
+            BackendNotReadyError: ZContext 未就绪或游戏窗口未就绪时抛。
+        """
+        self._ensure_ready()
+        controller = self._ctx.controller
+        if controller is None or not controller.is_game_window_ready:
+            raise BackendNotReadyError('游戏窗口未就绪')
+        controller.active_window()
+        clicked = controller.click(Point(int(x), int(y)), press_time=press_time)
+        return {'success': clicked, 'x': int(x), 'y': int(y), 'in_window': clicked}
 
     def start_run(self, source: str, op_factory: 'Callable[[ZContext], Operation]') -> tuple[bool, Future | None]:
         """触发运行(供 MCP/HTTP 适配器调用,返回 future 供 block=True 时 await)。
