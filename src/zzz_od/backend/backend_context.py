@@ -21,12 +21,15 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from one_dragon.base.config.basic_game_config import TypeInputWay
+from one_dragon.base.controller.pc_clipboard import PcClipboard
 from one_dragon.base.geometry.point import Point
 from one_dragon.base.geometry.rectangle import Rect
 from one_dragon.base.operation.operation_base import OperationResult
 from one_dragon.base.screen.screen_area import ScreenArea
 from one_dragon.base.screen.screen_match import find_screen_matches
 from one_dragon.utils import cv2_utils, debug_utils
+from one_dragon.utils.log_utils import mask_text
 from zzz_od.backend.schemas import (
     AnalyzeScreenResult,
     OcrText,
@@ -509,6 +512,44 @@ class ZzzBackendContext:
         controller.active_window()
         clicked = controller.click(Point(int(x), int(y)), press_time=press_time)
         return {'success': clicked, 'x': int(x), 'y': int(y), 'in_window': clicked}
+
+    def input_text(self, text: str, use_clipboard: bool | None = None) -> dict:
+        """向当前焦点输入框输入文本(账号/密码等)。操作类。
+
+        use_clipboard=None → 跟随 ``game_config.type_input_way``(同 ``EnterGame``);
+        True/False → 强制剪贴板/逐键。输入前激活游戏窗口(键盘注入 / Ctrl+V 均需前台焦点)。
+
+        Args:
+            text: 要输入的文本。
+            use_clipboard: True=剪贴板(copy_and_paste,支持中文/特殊字符);
+                False=逐键(controller.input_str);None=跟随全局配置。
+
+        Returns:
+            ``{success, method, masked_text}``:method ∈ {'clipboard','keyboard'};
+            masked_text 为脱敏文本。
+
+        Raises:
+            BackendNotReadyError: ZContext 未就绪或游戏窗口未就绪时抛。
+        """
+        self._ensure_ready()
+        controller = self._ctx.controller
+        if controller is None or not controller.is_game_window_ready:
+            raise BackendNotReadyError('游戏窗口未就绪')
+        use_cb = self._resolve_use_clipboard(use_clipboard)
+        controller.active_window()
+        if use_cb:
+            PcClipboard.copy_and_paste(text)
+            method = 'clipboard'
+        else:
+            controller.input_str(text)
+            method = 'keyboard'
+        return {'success': True, 'method': method, 'masked_text': mask_text(text)}
+
+    def _resolve_use_clipboard(self, use_clipboard: bool | None) -> bool:
+        """解析输入方式:非 None 原样返回;None 读 game_config.type_input_way(== CLIPBOARD 则 True)。"""
+        if use_clipboard is not None:
+            return use_clipboard
+        return self._ctx.game_config.type_input_way == TypeInputWay.CLIPBOARD.value.value
 
     def start_run(self, source: str, op_factory: 'Callable[[ZContext], Operation]') -> tuple[bool, Future | None]:
         """触发运行(供 MCP/HTTP 适配器调用,返回 future 供 block=True 时 await)。
