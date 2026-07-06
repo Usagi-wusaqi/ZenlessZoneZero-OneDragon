@@ -15,6 +15,7 @@
    - `gameplay/*.md` frontmatter `involves_screens`:本玩法经过哪些画面(用 `screen_name`)。
 2. **关联键**:一律用 `screen_info.screen_name`(中文,**非 `screen_id`**);`gameplay` 用 `gameplay_name`。
 3. **正文自由**:不强制 schema —— 先自由记录,收集完再统一分析、反哺 `screen_info`。
+4. **截图基线**:每篇画面 frontmatter 可带 `last_updated`(核对日期)+ `source_image`(当前基线来自哪张 `.debug/images/` 截图)。截图文件名是一次性捕获 ID、易失 —— **正文绝不写死具体 ID**,变更复核走方法(重新截图 → `analyze_screen` → 与 OCR 快照 diff → 更新 `last_updated`/`source_image`)。
 
 ## 演化路径
 

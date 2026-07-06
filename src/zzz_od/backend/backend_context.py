@@ -21,7 +21,9 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from one_dragon.base.geometry.rectangle import Rect
 from one_dragon.base.operation.operation_base import OperationResult
+from one_dragon.base.screen.screen_area import ScreenArea
 from one_dragon.base.screen.screen_match import find_screen_matches
 from one_dragon.utils import cv2_utils, debug_utils
 from zzz_od.backend.schemas import (
@@ -43,6 +45,30 @@ def _iso(ts: float | None) -> str | None:
     if ts is None:
         return None
     return datetime.fromtimestamp(ts).isoformat()
+
+
+def _validate_pc_rect(pc_rect: list[int]) -> str | None:
+    """校验 pc_rect=[x1,y1,x2,y2];合法返 None,否则返错误描述。"""
+    if (not isinstance(pc_rect, list) or len(pc_rect) != 4
+            or not all(isinstance(v, int) for v in pc_rect)):
+        return f'pc_rect 非法(需 4 个整数): {pc_rect}'
+    x1, y1, x2, y2 = pc_rect
+    if not (0 <= x1 < x2 <= 1920 and 0 <= y1 < y2 <= 1080):
+        return f'pc_rect 越界或非正(需 1920×1080 内、x2>x1、y2>y1): {pc_rect}'
+    return None
+
+
+def _area_result(success: bool, screen_name: str, area_name: str, action: str | None,
+                 error: str | None = None, count: int | None = None) -> dict:
+    """构造 area CRUD 的统一返回 dict。"""
+    return {
+        'success': success,
+        'screen_name': screen_name,
+        'area_name': area_name,
+        'action': action,
+        'area_count': count,
+        'error': error,
+    }
 
 
 class RunState(str, Enum):
@@ -348,6 +374,98 @@ class ZzzBackendContext:
             return AnalyzeScreenResult(success=True, ocr_texts=ocr_texts, screens=screens, error=None)
         except Exception as e:  # noqa: BLE001 OCR/匹配异常兜底:不回写,返失败
             return AnalyzeScreenResult(success=False, ocr_texts=[], screens=[], error=str(e))
+
+    def upsert_screen_area(
+        self,
+        screen_name: str,
+        area_name: str,
+        pc_rect: list[int],
+        text: str = '',
+        lcs_percent: float = 0.5,
+        template_sub_dir: str = '',
+        template_id: str = '',
+        template_match_threshold: float = 0.7,
+        color_range: list[list[int]] | None = None,
+        goto_list: list[str] | None = None,
+        id_mark: bool = False,
+        gamepad_key: str | None = None,
+    ) -> dict:
+        """按 area_name 在指定 screen 插入或更新一个 area(写 yml + reload)。操作类。
+
+        area_name 已存在 → 整体更新;不存在 → 追加。写回 screen_info yml 并重载,
+        下次 analyze_screen 即生效。无需游戏窗口在线。
+
+        Args:
+            screen_name: 目标画面名(中文,对齐 get_screen / analyze 返回)。
+            area_name: 区域名(同 screen 内唯一,作匹配键)。
+            pc_rect: ``[x1, y1, x2, y2]``,1920×1080 内、x2>x1、y2>y1。
+            text: 文本区域的 OCR 文本(空则非文本区)。
+            lcs_percent: 文本匹配阈值。
+            template_sub_dir / template_id: 模板引用;template_id 非空时模板必须存在,否则阻断。
+            template_match_threshold: 模板匹配阈值。
+            color_range: 文本颜色筛选 ``[[lower], [upper]]`` 或 None。
+            goto_list: 交互后可能跳转的画面名列表。
+            id_mark: 是否画面唯一标识。
+            gamepad_key: 手柄动作名。
+
+        Returns:
+            ``{success, screen_name, area_name, action(inserted/updated), area_count, error}``。
+        """
+        try:
+            if not area_name:
+                return _area_result(False, screen_name, area_name, None, error='area_name 不能为空')
+            rect_msg = _validate_pc_rect(pc_rect)
+            if rect_msg is not None:
+                return _area_result(False, screen_name, area_name, None, error=rect_msg)
+            if template_id and self._ctx.template_loader.load_template(template_sub_dir, template_id) is None:
+                return _area_result(False, screen_name, area_name, None,
+                                    error=f'模板不存在: {template_sub_dir}/{template_id}')
+            area = ScreenArea(
+                area_name=area_name,
+                pc_rect=Rect(int(pc_rect[0]), int(pc_rect[1]), int(pc_rect[2]), int(pc_rect[3])),
+                text=text, lcs_percent=lcs_percent,
+                template_id=template_id, template_sub_dir=template_sub_dir,
+                template_match_threshold=template_match_threshold,
+                color_range=color_range, goto_list=goto_list or [],
+                id_mark=id_mark, gamepad_key=gamepad_key,
+            )
+            screen_info = self._ctx.screen_loader.get_screen(screen_name)  # 未找到 raise
+            action = screen_info.upsert_area(area)
+            self._ctx.screen_loader.save_screen(screen_info)
+            return _area_result(True, screen_name, area_name, action, count=len(screen_info.area_list))
+        except Exception as e:  # noqa: BLE001 工具层兜底,不向 MCP 透传
+            return _area_result(False, screen_name, area_name, None, error=str(e),
+                                count=self._safe_area_count(screen_name))
+
+    def delete_screen_area(self, screen_name: str, area_name: str) -> dict:
+        """按 area_name 删除指定 screen 的一个 area(写 yml + reload)。操作类。
+
+        Args:
+            screen_name: 目标画面名。
+            area_name: 要删除的区域名;不存在则报错。
+
+        Returns:
+            ``{success, screen_name, area_name, action(deleted), area_count, error}``。
+        """
+        try:
+            if not area_name:
+                return _area_result(False, screen_name, area_name, None, error='area_name 不能为空')
+            screen_info = self._ctx.screen_loader.get_screen(screen_name)  # 未找到 raise
+            if not screen_info.remove_area_by_name(area_name):
+                return _area_result(False, screen_name, area_name, None,
+                                    error=f'未找到 area: {area_name}', count=len(screen_info.area_list))
+            self._ctx.screen_loader.save_screen(screen_info)
+            return _area_result(True, screen_name, area_name, 'deleted', count=len(screen_info.area_list))
+        except Exception as e:  # noqa: BLE001 工具层兜底
+            return _area_result(False, screen_name, area_name, None, error=str(e),
+                                count=self._safe_area_count(screen_name))
+
+    def _safe_area_count(self, screen_name: str) -> int | None:
+        """异常路径下尽量取 area 数(取不到返 None,不再抛)。"""
+        try:
+            return len(self._ctx.screen_loader.get_screen(screen_name).area_list)
+        except Exception:  # noqa: BLE001
+            return None
 
     def close_game(self) -> str:
         """关闭游戏(发关闭窗口信号,秒级,不走 RunSlot)。
