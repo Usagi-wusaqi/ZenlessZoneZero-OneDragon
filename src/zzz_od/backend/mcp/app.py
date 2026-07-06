@@ -7,9 +7,9 @@
 
 注意：
     - 同步工具（check/capture/analyze）直接调用 backend 的同步方法；
-    - ``open_and_enter_game`` 为异步长耗时操作，基于 ``backend.start_run`` 适配，
+    - ``open_game`` 为异步长耗时操作，基于 ``backend.start_run`` 适配，
       ``block=True`` 阻塞到完成、``block=False`` 立刻返回。
-    - 运行类 tool 工厂（``make_open_and_enter_game`` 等）为模块级函数，
+    - 运行类 tool 工厂（``make_open_game`` 等）为模块级函数，
       只调 backend 公开方法，不戳 run_slot 私有，便于独立测试。
 """
 
@@ -52,22 +52,26 @@ def _save_screenshot(image: 'MatLike') -> str:
     return str(img_path)
 
 
-def make_open_and_enter_game(backend: ZzzBackendContext) -> Callable:
-    """构造 ``open_and_enter_game`` tool(模块级,便于独立测试)。
+def make_open_game(backend: ZzzBackendContext) -> Callable:
+    """构造 ``open_game`` tool(模块级,便于独立测试)。
 
-    返回的 async tool 只调 backend 公开方法(``start_run``/``query_status``),
-    不戳 run_slot 私有(P11 对称 + 封装)。
+    enter=True(默认)跑 ``OpenAndEnterGame``(打开+自动登录,到大世界);
+    enter=False 跑 ``OpenGame``(打开+等窗口就绪,停在打开游戏 ready 态,不登录)。
+    其余 block/并发语义同原 ``open_and_enter_game``。
     """
-    async def open_and_enter_game(block: bool = True) -> dict | str:
-        """打开并进入绝区零游戏(长耗时,需交互式桌面)。
+    async def open_game(enter: bool = True, block: bool = True) -> dict | str:
+        """打开游戏(可选自动登录)。长耗时,需交互式桌面。
 
-        block=True(默认)阻塞到完成返结果文本;block=False 立刻返回,用 get_run_status 查进度。
-        副作用:操作游戏(点击/按键);单跑道,已有运行时返回错误(含 source + 提示)。
-        中断语义:block=True 时若调用方取消 await,底层 operation 仍继续(结果入槽),
-        用 get_run_status 查;中断的只是本次 await,不影响后台 _run。
+        enter=True(默认)→ 打开 + 自动登录(= 原 open_and_enter_game,到大世界);
+        enter=False → 只打开 + 等窗口就绪,停在「打开游戏」ready 态(不登录),
+        供调用方分步驱动登录流程。
+        block=True(默认)阻塞到完成;block=False 立刻返回,用 get_run_status 查进度。
+        副作用:操作游戏(启动 exe / 可能登录);单跑道,已有运行时返回错误(含 source + 提示)。
         """
         from zzz_od.operation.enter_game.open_and_enter_game import OpenAndEnterGame
-        ok, future = backend.start_run('mcp', lambda ctx: OpenAndEnterGame(ctx))
+        from zzz_od.operation.enter_game.open_game import OpenGame
+        op_factory = (lambda ctx: OpenGame(ctx)) if not enter else (lambda ctx: OpenAndEnterGame(ctx))
+        ok, future = backend.start_run('mcp', op_factory)
         if not ok:
             st = backend.query_status()
             return {
@@ -85,8 +89,10 @@ def make_open_and_enter_game(backend: ZzzBackendContext) -> Callable:
                 'hint': '用 get_run_status 查进度与结果',
             }
         result: OperationResult = await asyncio.wrap_future(future)  # 中断 cancel 的是 await,底层 _run 继续
-        return '成功打开并进入绝区零游戏' if result.success else f'打开游戏失败: {result.status}'
-    return open_and_enter_game
+        if enter:
+            return '成功打开并进入绝区零游戏' if result.success else f'打开游戏失败: {result.status}'
+        return '成功打开游戏(未登录)' if result.success else f'打开游戏失败: {result.status}'
+    return open_game
 
 
 def make_get_run_status(backend: ZzzBackendContext) -> Callable[[], RunStatusResult]:
@@ -116,7 +122,7 @@ def create_mcp_server(backend: ZzzBackendContext, name: str = "zzz_od") -> FastM
 
     通过闭包将 ``backend`` 注入到各工具函数中，使工具调用最终落到 backend 的
     game 切片方法（``check_window``/``capture``/``analyze``）；运行类操作
-    （``open_and_enter_game``/``get_run_status``/``stop_run``）经模块级工厂
+    （``open_game``/``get_run_status``/``stop_run``）经模块级工厂
     构造后用 ``mcp.tool()(...)`` 注册。
 
     Args:
@@ -242,7 +248,36 @@ def create_mcp_server(backend: ZzzBackendContext, name: str = "zzz_od") -> FastM
         except Exception as e:  # noqa: BLE001 工具层兜底(BackendNotReadyError 等)
             return f"错误: {e}"
 
-    mcp.tool()(make_open_and_enter_game(backend))
+    @mcp.tool()
+    def click_game(x: float, y: float, press_time: float = 0.0) -> dict:
+        """点击游戏窗口内坐标(1080p 游戏空间,同 screen_info pc_rect 中心)。操作类。
+
+        坐标经控制器缩放到真实屏幕;不在窗口内则不点击(in_window=False)。需游戏窗口就绪。
+
+        Returns:
+            ``{success, x, y, in_window, error?}``;backend 抛错时 success=False + error。
+        """
+        try:
+            return backend.click_game(x, y, press_time)
+        except Exception as e:  # noqa: BLE001 工具层兜底
+            return {'success': False, 'x': x, 'y': y, 'in_window': False, 'error': str(e)}
+
+    @mcp.tool()
+    def input_text(text: str, use_clipboard: bool | None = None) -> dict:
+        """向当前焦点输入框输入文本(账号/密码等)。操作类。
+
+        use_clipboard=None 跟随 game_config.type_input_way;True/False 强制剪贴板/逐键。
+        需先用 click_game 点击输入框聚焦。需游戏窗口就绪。
+
+        Returns:
+            ``{success, method, masked_text, error?}``;backend 抛错时 success=False + error。
+        """
+        try:
+            return backend.input_text(text, use_clipboard)
+        except Exception as e:  # noqa: BLE001 工具层兜底
+            return {'success': False, 'method': None, 'masked_text': None, 'error': str(e)}
+
+    mcp.tool()(make_open_game(backend))
     mcp.tool()(make_get_run_status(backend))
     mcp.tool()(make_stop_run(backend))
 
