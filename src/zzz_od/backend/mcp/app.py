@@ -15,41 +15,16 @@
 
 import asyncio
 from collections.abc import Callable
-from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mcp.server.fastmcp import FastMCP
 
-from one_dragon.utils import os_utils
 from one_dragon.utils.log_utils import log
-from zzz_od.backend.backend_context import ZzzBackendContext
+from zzz_od.backend.backend_context import ZzzBackendContext, _save_screenshot
 from zzz_od.backend.schemas import AnalyzeScreenResult, RunStatusResult
 
 if TYPE_CHECKING:
-    from cv2.typing import MatLike
-
     from one_dragon.base.operation.operation_base import OperationResult
-
-
-def _save_screenshot(image: 'MatLike') -> str:
-    """将 RGB 截图以 BGR 写盘，返回绝对路径。
-
-    Args:
-        image: backend ``capture`` 返回的 RGB ``ndarray``。
-
-    Returns:
-        保存后的截图文件绝对路径。
-    """
-    import cv2
-
-    screenshot_dir = Path(os_utils.get_path_under_work_dir(".debug", "zzz_od_mcp", "screenshot"))
-    screenshot_dir.mkdir(parents=True, exist_ok=True)
-    img_path = screenshot_dir / f"screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
-    bgr_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-    if not cv2.imwrite(str(img_path), bgr_image):
-        raise RuntimeError(f"截图写盘失败: {img_path}")
-    return str(img_path)
 
 
 def make_open_game(backend: ZzzBackendContext) -> Callable:
