@@ -10,7 +10,7 @@
 |---|---|---|
 | `check_game_window` | `backend.check_window()` | 状态文本（`str`） |
 | `capture_game_screen` | `backend.capture()` | 截图绝对路径（落盘 `.debug/zzz_od_mcp/screenshot/`） |
-| `analyze_screen` | `backend.analyze()` | `AnalyzeScreenResult`（结构化 JSON；FastMCP 据返回注解自动生成 output schema） |
+| `analyze_screen(screenshot=None, save_image=False)` | `backend.analyze()` | `AnalyzeScreenResult`（结构化 JSON；FastMCP 据返回注解自动生成 output schema；实时 + `save_image=True` 多回传 `screenshot_path`） |
 | `open_game(enter=True, block=True)` | `backend.start_run('mcp', op_factory)`（`enter=False`→`OpenGame`，`enter=True`→`OpenAndEnterGame`） | `block=True`：结果文本（`str`，按 enter 分「成功打开游戏(未登录)」/「成功打开并进入绝区零游戏」）；`block=False`：已启动 JSON；并发拒绝时返错误 JSON |
 | `click_game(x, y, press_time=0)` | `backend.click_game()` | `{success, x, y, in_window}`（坐标不在窗口内 → `in_window=False`） |
 | `input_text(text, use_clipboard=None)` | `backend.input_text()` | `{success, method, masked_text}`（`use_clipboard=None` 跟 `game_config.type_input_way`；返回脱敏文本） |
@@ -22,6 +22,7 @@
 
 - backend 实例**注入**（闭包捕获），不用全局单例，也不用 FastMCP lifespan 管 backend 生命周期（由入口管）。
 - `capture_game_screen` 落盘返路径,客户端读取该图片;`analyze_screen` 返结构化 dataclass,FastMCP 序列化为带嵌套 `OcrText` 的 JSON。
+- `analyze_screen(save_image=True)`（实时模式）把已截的内存图顺手存盘 + 回传 `screenshot_path`，供调用方喂 vision double-check（省第二次截图、保证 vision 看到的 = analyze 分析的那一帧）。默认 `false` 不落盘；离线模式（`screenshot=<path>`）忽略 `save_image`、`screenshot_path` 恒 `None`。存盘路径沿用 `.debug/zzz_od_mcp/screenshot/screenshot_<时间戳>.png`（与 `capture_game_screen` 一致）。观察类工具可选持久化的设计依据见 [design-principles.md](design-principles.md) P13。
 - 长耗时 operation（`open_game`）经 backend 共享 `RunSlot` 派发：`block=True` 用 `asyncio.wrap_future(future)` 阻塞 await 取结果，`block=False` 立刻返回已启动状态，后续用 `get_run_status` 查进度。`enter=False` 只打开+等窗口就绪（停「打开游戏」ready 态，不登录），供调用方分步驱动登录流程。MCP 与 HTTP（见 [http.md](http.md)）**对称暴露**这套运行态三件套（[design-principles.md](design-principles.md) P11）。
 - **中断安全**：`block=True` 时若调用方取消 await，中断的只是本次 await，底层 `RunSlot._run` 继续执行、结果入槽，可用 `get_run_status` 查到终态。
 - 单跑道：已有运行在进行时 `open_game` 返回并发拒绝（含 `source` + 提示），保证同进程独占资源不冲突。
@@ -51,5 +52,5 @@ claude mcp add --transport http zzz_od http://127.0.0.1:23001/mcp
 
 - [architecture.md](architecture.md) — backend 方法定义
 - [http.md](http.md) — 并行的 HTTP 适配器
-- [design-principles.md](design-principles.md) — MCP tool 设计规范（P1–P12）
+- [design-principles.md](design-principles.md) — MCP tool 设计规范（P1–P13）
 - [entry.md](entry.md) — 服务入口

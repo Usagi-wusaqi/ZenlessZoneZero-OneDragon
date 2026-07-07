@@ -10,7 +10,7 @@
 |---|---|---|---|
 | GET | `/game/window` | `backend.check_window()` | `WindowStatus` JSON |
 | GET | `/game/capture` | `backend.capture()` | PNG 字节（`image/png`，不落盘） |
-| GET | `/game/analyze` | `backend.analyze()` | `AnalyzeScreenResult` JSON |
+| GET | `/game/analyze?save_image=` | `backend.analyze()` | `AnalyzeScreenResult` JSON（`save_image=true` 实时模式多带 `screenshot_path`） |
 | POST | `/game/enter?block=` | `backend.start_run('http', op_factory)` | `block=true`（默认）：结果 JSON；`block=false`：已启动 JSON；并发拒绝返错误 JSON |
 | GET | `/game/status` | `backend.query_status()` | `RunStatusResult` JSON |
 | POST | `/game/stop` | `backend.stop()` | `{"stopped": bool, ...}` JSON |
@@ -20,6 +20,7 @@
 
 - 处理器调 backend 走 `asyncio.to_thread`；`BackendNotReadyError` → 503 JSON。
 - `/game/capture` 直接回传 PNG 字节（区别于 MCP 的落盘返路径——同一能力、不同序列化）。
+- `/game/analyze?save_image=true`（实时模式）让 backend 顺手存盘 + 响应多带 `screenshot_path`（对称 MCP `analyze_screen(save_image=True)`，[design-principles.md](design-principles.md) P11 / P13）；默认 `false` 不落盘，离线模式忽略。
 - `/game/enter` 经 `backend.start_run` 异步派发到共享 `RunSlot`：`block=true`（默认）用 `asyncio.wrap_future(future)` 阻塞到运行结束返结果文本；`block=false` 立刻返回已启动状态，后续用 `/game/status` 查进度与结果。单跑道，已有运行时返回并发拒绝 JSON（含 `source` + 提示）。
 - skill 教 AI 经 Bash / curl 打这些端点（通用，任何 AI 工具可用）。
 
