@@ -76,13 +76,15 @@ def _configure_runtime_logger() -> None:
         ),
     )
 
-def verify_working_directory():
-    # 设置当前工作目录
-    if getattr(sys, 'frozen', False):
-        cwd = os.path.dirname(sys.executable)
+def verify_working_directory() -> str:
+    """切换并校验启动器工作目录。
 
-    # 如果目录为空，使用当前工作目录
-    if not cwd:
+    Returns:
+        启动器使用的工作目录。
+    """
+    if getattr(sys, 'frozen', False):
+        cwd = str(Path(sys.executable).resolve().parent)
+    else:
         cwd = os.getcwd()
 
     os.chdir(cwd)
