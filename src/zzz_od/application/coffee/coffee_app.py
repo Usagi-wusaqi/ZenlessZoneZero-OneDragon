@@ -208,23 +208,13 @@ class CoffeeApp(ZApplication):
         if self.config.choose_way == CoffeeChooseWay.PLAN_PRIORITY.value.value:
             opt_coffee_list = self.ctx.compendium_service.coffee_schedule[day]
 
-            self.charge_plan_config.reset_plans()
+            if self.charge_plan_config.loop and self.charge_plan_config.all_plan_finished():
+                self.charge_plan_config.reset_plans()
             # 先找还没有完成的计划
             for plan in self.charge_plan_config.plan_list:
                 if plan.run_times >= plan.plan_times:
                     continue
                 for coffee in opt_coffee_list:
-                    if self._is_coffee_for_plan(coffee, plan):
-                        to_choose_list.append(coffee.coffee_name)
-                    break
-
-            # 再找还已经完成的计划
-            for plan in self.charge_plan_config.plan_list:
-                if plan.run_times < plan.plan_times:
-                    continue
-                for coffee in opt_coffee_list:
-                    if coffee.coffee_name in self.had_coffee_list:
-                        continue
                     if self._is_coffee_for_plan(coffee, plan):
                         to_choose_list.append(coffee.coffee_name)
                     break
