@@ -13,7 +13,7 @@ class CoffeeTransportPoint(Enum):
 
 class CoffeeChooseWay(Enum):
 
-    PLAN_PRIORITY = ConfigItem('优先体力计划', desc='优先选择符合未完成体力计划的咖啡，未完成实战模拟室计划会选浓缩咖啡，没有匹配时选择汀曼特调')
+    PLAN_PRIORITY = ConfigItem('优先双倍活动', desc='喝后挑战沿用体力计划且双倍活动开启时选择浓缩咖啡等，否则选择汀曼特调')
     TINMAN_ONLY = ConfigItem('汀曼特调', desc='只选择汀曼特调')
     ESPRESSO_ONLY = ConfigItem('浓缩咖啡', desc='只选择浓缩咖啡')
 
@@ -48,6 +48,9 @@ class CoffeeConfig(ApplicationConfig):
         if self.get('challenge_way', None) in ['全都挑战', '只挑战体力计划']:
             self.data.pop('challenge_way')
             changed = True
+        if self.get('choose_way', None) == '优先体力计划':
+            self.data.pop('choose_way')
+            changed = True
         if changed:
             self.save()
 
@@ -61,7 +64,7 @@ class CoffeeConfig(ApplicationConfig):
 
     @property
     def choose_way(self) -> str:
-        return self.get('choose_way', CoffeeChooseWay.PLAN_PRIORITY.value.value)
+        return self.get('choose_way', CoffeeChooseWay.TINMAN_ONLY.value.value)
 
     @choose_way.setter
     def choose_way(self, new_value: str) -> None:
