@@ -24,11 +24,6 @@ class CoffeeChallengeWay(Enum):
     NO_DOUBLE = ConfigItem('沿用体力计划（不考虑双倍活动）', desc='喝完咖啡后运行体力计划，本次跳过双倍活动')
     NONE = ConfigItem('不挑战', desc='只喝咖啡，不自动进入副本')
 
-class CoffeeCardNumEnum(Enum):
-    # 注意需要跟charge_plan_config.CardNumEnum一致
-    DEFAULT = ConfigItem('默认数量', desc='挑战体力计划外的副本时，按游戏内设数量')
-    NUM_1 = ConfigItem('1', desc='挑战体力计划外的副本时，选择最少数量')
-
 
 class CoffeeConfig(ApplicationConfig):
 
@@ -51,6 +46,10 @@ class CoffeeConfig(ApplicationConfig):
         if self.get('choose_way', None) == '优先体力计划':
             self.data.pop('choose_way')
             changed = True
+        for key in ['card_num', 'predefined_team_idx', 'auto_battle', 'run_charge_plan_afterwards']:
+            if key in self.data:
+                self.data.pop(key)
+                changed = True
         if changed:
             self.save()
 
@@ -77,22 +76,6 @@ class CoffeeConfig(ApplicationConfig):
     @challenge_way.setter
     def challenge_way(self, new_value: str) -> None:
         self.update('challenge_way', new_value)
-
-    @property
-    def card_num(self) -> str:
-        return self.get('card_num', CoffeeCardNumEnum.NUM_1.value.value)
-
-    @card_num.setter
-    def card_num(self, new_value: str) -> None:
-        self.update('card_num', new_value)
-
-    @property
-    def auto_battle(self) -> str:
-        return self.get('auto_battle', '全配队通用')
-
-    @auto_battle.setter
-    def auto_battle(self, new_value: str) -> None:
-        self.update('auto_battle', new_value)
 
     @property
     def day_coffee_1(self) -> str:
@@ -170,27 +153,3 @@ class CoffeeConfig(ApplicationConfig):
             return self.day_coffee_6
         elif day == 7:
             return self.day_coffee_7
-
-    @property
-    def predefined_team_idx(self) -> int:
-        """
-        预备编队 -1代表游戏内默认
-        @return:
-        """
-        return self.get('predefined_team_idx', -1)
-
-    @predefined_team_idx.setter
-    def predefined_team_idx(self, new_value: int) -> None:
-        self.update('predefined_team_idx', new_value)
-
-    @property
-    def run_charge_plan_afterwards(self) -> bool:
-        """
-        咖啡后 再次挑战体力计划
-        @return:
-        """
-        return self.get('run_charge_plan_afterwards', False)
-
-    @run_charge_plan_afterwards.setter
-    def run_charge_plan_afterwards(self, new_value: bool) -> None:
-        self.update('run_charge_plan_afterwards', new_value)
