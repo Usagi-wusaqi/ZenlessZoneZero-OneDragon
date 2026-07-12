@@ -1,6 +1,7 @@
 from typing import ClassVar
 
 from one_dragon.base.operation.application import application_const
+from one_dragon.base.operation.operation_base import OperationResult
 from one_dragon.base.operation.operation_edge import node_from
 from one_dragon.base.operation.operation_node import operation_node
 from one_dragon.base.operation.operation_notify import NotifyTiming, node_notify
@@ -61,8 +62,6 @@ class ChargePlanApp(ZApplication):
     def start_charge_plan(self) -> OperationRoundResult:
         self.temp_plan = None
         self.last_tried_plan = None
-        for plan in self.config.plan_list:
-            plan.skipped = False
         current_dt = self.run_record.get_current_dt()
         if self.config.try_reset_plan_times_by_dt(current_dt):
             log.info('已按游戏刷新日重置体力计划已运行次数 %s', current_dt)
@@ -306,6 +305,11 @@ class ChargePlanApp(ZApplication):
         op = BackToNormalWorld(self.ctx)
         op_result = op.execute()
         return self.round_by_op_result(op_result, status=f'剩余电量 {self.charge_power}')
+
+    def after_operation_done(self, result: OperationResult) -> None:
+        for plan in self.config.plan_list:
+            plan.skipped = False
+        ZApplication.after_operation_done(self, result)
 
 
 def __debug():
