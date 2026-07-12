@@ -2,7 +2,6 @@ from enum import Enum
 
 from one_dragon.base.config.config_item import ConfigItem
 from one_dragon.base.operation.application.application_config import ApplicationConfig
-from one_dragon_qt.widgets.setting_card.yaml_config_adapter import YamlConfigAdapter
 from zzz_od.game_data.map_area import TransportPoint
 
 
@@ -21,9 +20,9 @@ class CoffeeChooseWay(Enum):
 
 class CoffeeChallengeWay(Enum):
 
-    ALL = ConfigItem('全都挑战')
-    ONLY_PLAN = ConfigItem('只挑战体力计划')
-    NONE = ConfigItem('不挑战')
+    DEFAULT = ConfigItem('沿用体力计划', desc='喝完咖啡后运行体力计划，优先处理已开启的双倍活动')
+    NO_DOUBLE = ConfigItem('沿用体力计划（不考虑双倍活动）', desc='喝完咖啡后运行体力计划，本次跳过双倍活动')
+    NONE = ConfigItem('不挑战', desc='只喝咖啡，不自动进入副本')
 
 class CoffeeCardNumEnum(Enum):
     # 注意需要跟charge_plan_config.CardNumEnum一致
@@ -40,6 +39,17 @@ class CoffeeConfig(ApplicationConfig):
             app_id='coffee',
             group_id=group_id,
         )
+
+        # 旧配置清理，2026-10-12 可删除
+        self._clear_legacy_config()
+
+    def _clear_legacy_config(self) -> None:
+        changed = False
+        if self.get('challenge_way', None) in ['全都挑战', '只挑战体力计划']:
+            self.data.pop('challenge_way')
+            changed = True
+        if changed:
+            self.save()
 
     @property
     def transport_point(self) -> str:
@@ -59,7 +69,7 @@ class CoffeeConfig(ApplicationConfig):
 
     @property
     def challenge_way(self) -> str:
-        return self.get('challenge_way', CoffeeChallengeWay.ALL.value.value)
+        return self.get('challenge_way', CoffeeChallengeWay.DEFAULT.value.value)
 
     @challenge_way.setter
     def challenge_way(self, new_value: str) -> None:

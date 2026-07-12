@@ -31,9 +31,6 @@ from zzz_od.application.zzz_application import ZApplication
 from zzz_od.context.zzz_context import ZContext
 from zzz_od.game_data.compendium import Coffee
 from zzz_od.operation.back_to_normal_world import BackToNormalWorld
-from zzz_od.operation.compendium.area_patrol import AreaPatrol
-from zzz_od.operation.compendium.combat_simulation import CombatSimulation
-from zzz_od.operation.compendium.expert_challenge import ExpertChallenge
 from zzz_od.operation.transport import Transport
 from zzz_od.operation.turning.turn_compensation import AngleTurnCompensator
 from zzz_od.operation.turning.turn_to_angle import turn_to_angle
@@ -68,7 +65,6 @@ class CoffeeApp(ZApplication):
         )
 
         self.chosen_coffee: Coffee | None = None  # 选择的咖啡
-        self.charge_plan: ChargePlanItem | None = None  # 咖啡模拟生成的挑战计划
         self.had_coffee_list: set[str] = set()  # 已经喝过的咖啡
         self.turn_compensator: AngleTurnCompensator = AngleTurnCompensator(self.ctx.controller)
 
@@ -350,103 +346,34 @@ class CoffeeApp(ZApplication):
             # 没有加成的
             return self.round_success('没有加成')
 
-        if self.config.challenge_way == CoffeeChallengeWay.NONE.value.value:
-            # 不挑战的
-            return self.round_by_find_and_click_area(self.last_screenshot, '咖啡店', '对话框确认',
-                                                     success_wait=1, retry_wait=1)
+        result = self.round_by_find_and_click_area(self.last_screenshot, '咖啡店', '对话框确认',
+                                                   success_wait=1, retry_wait=1)
+        # 点击失败或不挑战的
+        if not result.is_success or self.config.challenge_way == CoffeeChallengeWay.NONE.value.value:
+            return result
+        return self.round_success()
 
-        if self.config.challenge_way == CoffeeChallengeWay.ONLY_PLAN.value.value:
-            # 只挑战体力计划的
-            in_plan = False
-            for plan in self.charge_plan_config.plan_list:
-                if self._is_coffee_for_plan(self.chosen_coffee, plan):
-                    in_plan = True
-                    break
-
-            if not in_plan:
-                return self.round_by_find_and_click_area(self.last_screenshot, '咖啡店', '对话框确认',
-                                                         success_wait=1, retry_wait=1)
-
-        return self.round_by_find_and_click_area(self.last_screenshot, '咖啡店', '对话框前往',
-                                                 success_wait=1, retry_wait=1)
-
-    @node_from(from_name='选择前往', status='对话框前往')
-    @operation_node(name='传送副本')
-    def tp_mission(self) -> OperationRoundResult:
-        if self.chosen_coffee.without_benefit:
-            return self.round_fail('没有增益的咖啡')
-
-        coffee_plan: ChargePlanItem | None = None
-        for plan in self.charge_plan_config.plan_list:
-            if self._is_coffee_for_plan(self.chosen_coffee, plan):
-                coffee_plan = plan
-                break
-
-        if coffee_plan is None:
-            card_num = self.config.card_num
-        else:
-            card_num = coffee_plan.card_num
-
-        self.charge_plan = ChargePlanItem(
-            tab_name=self.chosen_coffee.tab.tab_name,
-            category_name=self.chosen_coffee.category.category_name,
-            mission_type_name=self.chosen_coffee.mission_type.mission_type_name,
-            mission_name=None if self.chosen_coffee.mission is None else self.chosen_coffee.mission.mission_name,
-            predefined_team_idx=self.config.predefined_team_idx,
-            auto_battle_config=self.config.auto_battle,
-            run_times=0,
-            plan_times=1,
-            card_num=card_num
-        )
-
-        area = self.ctx.screen_loader.get_area('咖啡店', '对话框确认')
-        result = self.round_by_ocr_and_click(self.last_screenshot, '确认', area=area)
-
-        if result.is_success:
-            return self.round_success(self.charge_plan.category_name, wait=5)
-        else:
-            return self.round_retry(result.status, wait=1)
-
-    @node_from(from_name='传送副本', status='实战模拟室')
-    @operation_node(name='实战模拟室')
-    def combat_simulation(self) -> OperationRoundResult:
-        op = CombatSimulation(self.ctx, self.charge_plan)
-        return self.round_by_op_result(op.execute())
-
-    @node_from(from_name='传送副本', status='区域巡防')
-    @operation_node(name='区域巡防')
-    def area_patrol(self) -> OperationRoundResult:
-        op = AreaPatrol(self.ctx, self.charge_plan)
-        return self.round_by_op_result(op.execute())
-
-    @node_from(from_name='传送副本', status='专业挑战室')
-    @operation_node(name='专业挑战室')
-    def expert_challenge(self) -> OperationRoundResult:
-        op = ExpertChallenge(self.ctx, self.charge_plan)
-        return self.round_by_op_result(op.execute())
-
+    @node_from(from_name='选择前往')
     @node_from(from_name='不占用点单确认', status='不可贪杯确认')  # 已经喝过了
     @node_from(from_name='点单后跳过', status='不可贪杯确认')  # 已经喝过了
     @node_from(from_name='对话选咖啡', status='已喝过')  # 澄辉坪-汀曼咖啡：剧情气泡 已喝过咖啡 BackToNormalWorld 兜底回大世界
     @node_from(from_name='选择前往', status='对话框确认')
     @node_from(from_name='选择前往', status='没有加成')
-    @node_from(from_name='实战模拟室')
-    @node_from(from_name='区域巡防')
-    @node_from(from_name='专业挑战室')
     @operation_node(name='返回大世界')
     def back_to_world(self) -> OperationRoundResult:
         op = BackToNormalWorld(self.ctx)
         return self.round_by_op_result(op.execute())
 
     @node_from(from_name='返回大世界')
-    @operation_node(name='结束后运行体力计划')
+    @operation_node(name='运行体力计划')
     def charge_plan_afterwards(self) -> OperationRoundResult:
-        if self.config.run_charge_plan_afterwards:
+        if self.config.challenge_way != CoffeeChallengeWay.NONE.value.value:
             op = self.ctx.run_context.get_application(
                 app_id=charge_plan_const.APP_ID,
                 instance_idx=self.ctx.current_instance_idx,
                 group_id=application_const.DEFAULT_GROUP_ID,
             )
+            op.ignore_double_reward = self.config.challenge_way == CoffeeChallengeWay.NO_DOUBLE.value.value
             return self.round_by_op_result(op.execute())
         else:
             return self.round_success('无需运行')

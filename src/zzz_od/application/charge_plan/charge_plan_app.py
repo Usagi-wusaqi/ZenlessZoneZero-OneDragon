@@ -57,6 +57,7 @@ class ChargePlanApp(ZApplication):
         self.temp_plan: ChargePlanItem | None = None  # 本次运行临时插入的计划
         self.last_tried_plan: ChargePlanItem | None = None
         self.current_plan: ChargePlanItem | None = None
+        self.ignore_double_reward: bool = False
 
     @operation_node(name='开始体力计划', is_start_node=True)
     def start_charge_plan(self) -> OperationRoundResult:
@@ -140,7 +141,7 @@ class ChargePlanApp(ZApplication):
 
         self.charge_power = digit
         self.run_record.record_current_charge_power(digit)
-        if self.config.double_reward:
+        if self.config.double_reward and not self.ignore_double_reward:
             return self.round_success('查看双倍活动')
         return self.round_success(f'剩余电量 {digit}')
 
@@ -307,6 +308,7 @@ class ChargePlanApp(ZApplication):
         return self.round_by_op_result(op_result, status=f'剩余电量 {self.charge_power}')
 
     def after_operation_done(self, result: OperationResult) -> None:
+        self.ignore_double_reward = False
         for plan in self.config.plan_list:
             plan.skipped = False
         ZApplication.after_operation_done(self, result)
