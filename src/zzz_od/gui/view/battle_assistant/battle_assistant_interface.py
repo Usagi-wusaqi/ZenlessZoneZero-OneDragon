@@ -151,7 +151,7 @@ class BattleAssistantInterface(AppRunInterface):
         self.background_mode_opt = SwitchSettingCard(
             icon=FluentIcon.ROBOT,
             title='后台模式（专享版）',
-            content='仅决定当前功能是否启用后台模式，配置与全局的后台模式共享。配置更改请前往「设置 → 游戏设置」',
+            content='仅控制当前功能是否临时启用后台模式；相关配置请前往「设置 → 游戏设置」调整',
         )
         self.background_mode_opt.value_changed.connect(self._on_background_mode_changed)
         top.add_widget(self.background_mode_opt)
