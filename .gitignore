@@ -3,7 +3,8 @@ build/
 dist/
 zzz-od-test/
 .idea/
-.vscode/
+.vscode/*
+!.vscode/launch.json
 __pycache__/
 deploy/build/
 deploy/dist/
