@@ -26,9 +26,14 @@ from pydantic import Field
 
 from one_dragon.utils.log_utils import log
 from zzz_od.backend.backend_context import ZzzBackendContext, _save_screenshot
-from zzz_od.backend.mcp.prompts import register_prompt_tools, register_prompts
+from zzz_od.backend.mcp.prompts import (
+    register_prompt_tools,
+    register_prompts,
+    render_instructions,
+)
 from zzz_od.backend.mcp.service_app import (
     make_describe_operation,
+    make_get_predefined_teams,
     make_list_applications,
     make_list_operations,
     make_run_one_dragon,
@@ -124,7 +129,7 @@ def create_mcp_server(backend: ZzzBackendContext, name: str = "zzz_od") -> FastM
     Returns:
         注册好工具的 ``FastMCP`` 实例。
     """
-    mcp = FastMCP(name)
+    mcp = FastMCP(name, instructions=render_instructions())
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, title="检查游戏窗口"))
     def check_game_window() -> WindowStatus | dict:
@@ -343,6 +348,7 @@ def create_mcp_server(backend: ZzzBackendContext, name: str = "zzz_od") -> FastM
     mcp.tool(annotations=ToolAnnotations(title="运行一条龙"))(make_run_one_dragon(backend))
     mcp.tool(annotations=ToolAnnotations(title="运行独立应用"))(make_run_standalone_app(backend))
     mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, title="列出可运行应用"))(make_list_applications(backend))
+    mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, title="读取预备编队列表"))(make_get_predefined_teams(backend))
     mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, title="查询运行状态"))(make_get_run_status(backend))
     mcp.tool(annotations=ToolAnnotations(title="停止运行"))(make_stop_run(backend))
     mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, title="列出可运行 operation"))(make_list_operations(backend))
