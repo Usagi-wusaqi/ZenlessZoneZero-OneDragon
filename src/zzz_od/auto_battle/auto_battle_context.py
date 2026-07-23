@@ -157,6 +157,7 @@ class AutoBattleContext:
             # 清空之前检测到的状态
 
             with self._normal_attack_lock:
+                self._normal_attack_locked(release=True)
                 self._normal_attack_missing_since = None
                 self._normal_attack_blocked = True
 
@@ -209,6 +210,7 @@ class AutoBattleContext:
         self._last_chain_front_correction_time: float = 0  # 上一次连携前台角色修正的时间
 
         with self._normal_attack_lock:
+            self._normal_attack_locked(release=True)
             self._normal_attack_missing_since = None
             self._normal_attack_blocked = True
 
