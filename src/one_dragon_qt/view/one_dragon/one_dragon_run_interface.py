@@ -219,9 +219,8 @@ class OneDragonRunInterface(SplitAppRunInterface):
         Args:
             new_app_list: 新顺序的应用列表
         """
-        # 更新配置中的 app_list 顺序
-        self.config.app_list = new_app_list
-        self.config.save_app_list()
+        # 更新配置中的 app_list 顺序；用户主动调整顺序时一并保存临时应用
+        self.config.set_app_order([item.app_id for item in new_app_list])
 
     def _on_app_card_run(self, app_id: str) -> None:
         """
@@ -231,7 +230,9 @@ class OneDragonRunInterface(SplitAppRunInterface):
         """
         for app in self.config.app_list:
             if app.app_id == app_id:
+                self.config.persist_app(app_id)
                 self.run_app_by_item(app)
+                break
 
     def on_app_switch_run(self, app_id: str, value: bool) -> None:
         """
@@ -240,7 +241,13 @@ class OneDragonRunInterface(SplitAppRunInterface):
         :param value:
         :return:
         """
-        self.config.set_app_enable(app_id, value)
+        removed = self.ctx.app_group_manager.set_one_dragon_app_enable(
+            config=self.config,
+            app_id=app_id,
+            enabled=value,
+        )
+        if removed:
+            self._init_app_list()
 
     def _on_instance_event(self, event) -> None:
         """
@@ -257,6 +264,7 @@ class OneDragonRunInterface(SplitAppRunInterface):
         self._refresh_app_config()
 
     def _on_app_setting_manager_ready(self) -> None:
+        self.ctx.app_group_manager.clear_config_cache()
         self._refresh_app_config()
         self._update_setting_btn_visibility()
 
