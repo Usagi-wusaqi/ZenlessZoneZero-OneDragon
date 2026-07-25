@@ -64,7 +64,10 @@ class ZContext(OneDragonContext):
 
     @cached_property
     def game_config(self):
+        """获取当前模式对应的游戏配置"""
         from zzz_od.config.game_config import GameConfig
+        if self.one_dragon_config.game_config_global_mode:
+            return GameConfig(None)
         return GameConfig(self.current_instance_idx)
 
     @cached_property
@@ -90,6 +93,17 @@ class ZContext(OneDragonContext):
         for prop in to_clear_props:
             if prop in self.__dict__:
                 del self.__dict__[prop]
+
+    def reload_game_config(self) -> None:
+        """重新加载游戏配置并同步当前控制器"""
+        if 'game_config' in self.__dict__:
+            del self.__dict__['game_config']
+
+        from zzz_od.controller.zzz_pc_controller import ZPcController
+
+        controller = self.controller
+        if isinstance(controller, ZPcController):
+            controller.sync_game_config(self.game_config)
 
     def _get_win_title(self) -> str:
         """获取当前配置对应的窗口标题"""

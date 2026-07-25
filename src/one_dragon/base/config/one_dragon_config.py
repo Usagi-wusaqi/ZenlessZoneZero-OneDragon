@@ -195,6 +195,15 @@ class OneDragonConfig(YamlConfig):
         self.update('instance_run', new_value)
 
     @property
+    def game_config_global_mode(self) -> bool:
+        """是否使用公共游戏配置"""
+        return self.get('game_config_global_mode', True)
+
+    @game_config_global_mode.setter
+    def game_config_global_mode(self, new_value: bool) -> None:
+        self.update('game_config_global_mode', new_value)
+
+    @property
     def after_done(self) -> str:
         return self.get('after_done', AfterDoneOpEnum.NONE.value.value)
 

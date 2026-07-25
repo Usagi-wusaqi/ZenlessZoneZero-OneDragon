@@ -30,7 +30,12 @@ class MonitorEnum(Enum):
 
 class BasicGameConfig(YamlConfig):
 
-    def __init__(self, instance_idx: int):
+    def __init__(self, instance_idx: int | None):
+        """初始化游戏配置
+
+        Args:
+            instance_idx: 实例索引；为 None 时使用公共游戏配置
+        """
         YamlConfig.__init__(self, 'game', instance_idx=instance_idx)
 
     @property

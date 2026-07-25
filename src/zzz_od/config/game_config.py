@@ -180,11 +180,17 @@ class GameConfig(BasicGameConfig):
         ])},
     }
 
-    def __init__(self, instance_idx: int):
+    def __init__(self, instance_idx: int | None):
+        """加载游戏配置，首次创建公共配置时迁移实例 1 的配置"""
         BasicGameConfig.__init__(self, instance_idx)
         # TODO 迁移旧配置 2026-9 删除
         self._migrate_legacy_keys()
         self._migrate_legacy_gamepad_keys()
+        if instance_idx is None and not self.is_file_exists:
+            instance_config = GameConfig(1)
+            if instance_config.is_file_exists:
+                self.data = instance_config.data
+                self.save()
 
     def _migrate_legacy_keys(self) -> None:
         """迁移旧键名到新键名。"""
