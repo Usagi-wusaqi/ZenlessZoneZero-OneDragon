@@ -316,9 +316,12 @@ class ChargePlanApp(ZApplication):
     @node_from(from_name='恶名狩猎', success=False)
     @operation_node(name='挑战完成')
     def challenge_complete(self) -> OperationRoundResult:
-        # 成功后继续正常轮转；失败则标记当前计划已跳过，避免在同一轮里死循环重试
+        # 普通计划失败后跳过当前计划；一次性计划失败则直接返回
         if self.previous_node.is_success:
             self.last_tried_plan = None
+        elif self._run_only_plan is not None:
+            self.temp_plan = None
+            return self.round_fail(self.previous_node.status)
         else:
             self.current_plan.skipped = True
             self.last_tried_plan = self.current_plan
