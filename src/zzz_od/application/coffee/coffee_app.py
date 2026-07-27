@@ -395,7 +395,7 @@ class CoffeeApp(ZApplication):
             mission_name=None if self.chosen_coffee.mission is None else self.chosen_coffee.mission.mission_name,
             predefined_team_idx=self.config.predefined_team_idx,
             auto_battle_config=self.config.auto_battle,
-            run_times=0,
+            run_times=1,
             plan_times=1,
             card_num=card_num
         )
@@ -481,7 +481,7 @@ class CoffeeApp(ZApplication):
         plan_data = source_plan.to_dict()
         plan_data['plan_id'] = None
         fallback_plan = ChargePlanItem.from_dict(plan_data)
-        fallback_plan.run_times = 0
+        fallback_plan.run_times = 1
         fallback_plan.plan_times = 1
         fallback_plan.card_num = str(min(battery_charge // 20, 2))
         fallback_plan.skipped = False
