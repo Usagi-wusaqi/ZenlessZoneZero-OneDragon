@@ -2,7 +2,7 @@ from enum import Enum
 
 from one_dragon.base.config.config_item import ConfigItem
 from one_dragon.base.operation.application.application_config import ApplicationConfig
-from one_dragon_qt.widgets.setting_card.yaml_config_adapter import YamlConfigAdapter
+from zzz_od.application.charge_plan.charge_plan_config import ChargePlanItem
 from zzz_od.game_data.map_area import TransportPoint
 
 
@@ -16,7 +16,6 @@ class CoffeeChooseWay(Enum):
 
     PLAN_PRIORITY = ConfigItem('优先体力计划', desc='优先选择符合体力计划的咖啡，实战模拟室计划会选浓缩咖啡，没有匹配时选择汀曼特调')
     TINMAN_ONLY = ConfigItem('汀曼特调', desc='只选择汀曼特调')
-    ESPRESSO_ONLY = ConfigItem('浓缩咖啡', desc='只选择浓缩咖啡')
 
 
 class CoffeeChallengeWay(Enum):
@@ -24,6 +23,14 @@ class CoffeeChallengeWay(Enum):
     ALL = ConfigItem('全都挑战')
     ONLY_PLAN = ConfigItem('只挑战体力计划')
     NONE = ConfigItem('不挑战')
+
+
+class CoffeeEndAction(Enum):
+
+    NONE = ConfigItem('不运行体力计划')
+    RUN_CHARGE_PLAN = ConfigItem('运行体力计划')
+    RUN_CHARGE_PLAN_WITH_FALLBACK = ConfigItem('运行体力计划并兜底剩余电量')
+
 
 class CoffeeCardNumEnum(Enum):
     # 注意需要跟charge_plan_config.CardNumEnum一致
@@ -40,6 +47,21 @@ class CoffeeConfig(ApplicationConfig):
             app_id='coffee',
             group_id=group_id,
         )
+
+        self._migrate_legacy_config()
+
+    def _migrate_legacy_config(self) -> None:
+        changed = False
+        if self.get('choose_way', None) == '浓缩咖啡':
+            self.data['choose_way'] = CoffeeChooseWay.TINMAN_ONLY.value.value
+            changed = True
+
+        if 'end_action' not in self.data and 'run_charge_plan_afterwards' in self.data:
+            self.data['end_action'] = CoffeeEndAction.RUN_CHARGE_PLAN.value.value if self.data.pop('run_charge_plan_afterwards') else CoffeeEndAction.NONE.value.value
+            changed = True
+
+        if changed:
+            self.save()
 
     @property
     def transport_point(self) -> str:
@@ -80,6 +102,22 @@ class CoffeeConfig(ApplicationConfig):
     @auto_battle.setter
     def auto_battle(self, new_value: str) -> None:
         self.update('auto_battle', new_value)
+
+    @property
+    def end_action(self) -> str:
+        return self.get('end_action', CoffeeEndAction.NONE.value.value)
+
+    @end_action.setter
+    def end_action(self, new_value: str) -> None:
+        self.update('end_action', new_value)
+
+    @property
+    def remaining_charge_fallback_plan(self) -> ChargePlanItem:
+        return ChargePlanItem.from_dict(self.get('remaining_charge_fallback_plan', {}))
+
+    @remaining_charge_fallback_plan.setter
+    def remaining_charge_fallback_plan(self, new_value: ChargePlanItem) -> None:
+        self.update('remaining_charge_fallback_plan', new_value.to_dict())
 
     @property
     def day_coffee_1(self) -> str:
@@ -169,15 +207,3 @@ class CoffeeConfig(ApplicationConfig):
     @predefined_team_idx.setter
     def predefined_team_idx(self, new_value: int) -> None:
         self.update('predefined_team_idx', new_value)
-
-    @property
-    def run_charge_plan_afterwards(self) -> bool:
-        """
-        咖啡后 再次挑战体力计划
-        @return:
-        """
-        return self.get('run_charge_plan_afterwards', False)
-
-    @run_charge_plan_afterwards.setter
-    def run_charge_plan_afterwards(self, new_value: bool) -> None:
-        self.update('run_charge_plan_afterwards', new_value)
