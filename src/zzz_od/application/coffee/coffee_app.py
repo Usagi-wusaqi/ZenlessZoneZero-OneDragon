@@ -203,6 +203,12 @@ class CoffeeApp(ZApplication):
         """
         to_choose_list = []
 
+        charge_plan_run_record = self.ctx.run_context.get_run_record(
+            app_id=charge_plan_const.APP_ID,
+            instance_idx=self.ctx.current_instance_idx,
+        )
+        self.charge_plan_config.try_reset_plan_times_by_dt(charge_plan_run_record.get_current_dt())
+
         for i in self.ctx.compendium_service.get_extra_coffee_list():
             if i.coffee_name in self.had_coffee_list:
                 continue
