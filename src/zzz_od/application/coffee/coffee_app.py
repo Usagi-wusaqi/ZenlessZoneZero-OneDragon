@@ -15,7 +15,9 @@ from one_dragon.base.operation.operation_notify import NotifyTiming, node_notify
 from one_dragon.base.operation.operation_round_result import OperationRoundResult
 from one_dragon.utils import cv2_utils, os_utils, str_utils
 from one_dragon.utils.i18_utils import gt
+from one_dragon.utils.log_utils import log
 from zzz_od.application.charge_plan import charge_plan_const
+from zzz_od.application.charge_plan.charge_plan_app import ChargePlanApp
 from zzz_od.application.charge_plan.charge_plan_config import (
     ChargePlanConfig,
     ChargePlanItem,
@@ -443,12 +445,48 @@ class CoffeeApp(ZApplication):
         if self.config.end_action == CoffeeEndAction.NONE.value.value:
             return self.round_success('无需运行')
 
-        op = self.ctx.run_context.get_application(
+        charge_plan_app: ChargePlanApp = self.ctx.run_context.get_application(
             app_id=charge_plan_const.APP_ID,
             instance_idx=self.ctx.current_instance_idx,
             group_id=application_const.DEFAULT_GROUP_ID,
         )
-        return self.round_by_op_result(op.execute())
+        op_result = charge_plan_app.execute()
+        should_fallback = (
+            self.config.end_action
+            == CoffeeEndAction.RUN_CHARGE_PLAN_WITH_FALLBACK.value.value
+        )
+        if not op_result.success or not should_fallback:
+            return self.round_by_op_result(op_result)
+
+        fallback_plan = self._build_remaining_charge_fallback_plan(charge_plan_app.battery_charge)
+        if fallback_plan is None:
+            return self.round_by_op_result(op_result)
+
+        return self.round_by_op_result(charge_plan_app.execute_plan_once(fallback_plan))
+
+    def _build_remaining_charge_fallback_plan(self, battery_charge: int) -> ChargePlanItem | None:
+        """按咖啡结束后处理规则生成一次性剩余电量兜底计划"""
+        if battery_charge < 20 or battery_charge >= 60:
+            return None
+
+        source_plan = self.config.remaining_charge_fallback_plan
+        if (
+            source_plan.category_name != '实战模拟室'
+            or source_plan.is_agent_plan
+            or source_plan.mission_name is None
+        ):
+            log.warning('剩余电量兜底必须选择具体的实战模拟室卡片')
+            return None
+
+        plan_data = source_plan.to_dict()
+        plan_data['plan_id'] = None
+        fallback_plan = ChargePlanItem.from_dict(plan_data)
+        fallback_plan.run_times = 0
+        fallback_plan.plan_times = 1
+        fallback_plan.card_num = str(min(battery_charge // 20, 2))
+        fallback_plan.skipped = False
+        log.info('使用剩余电量兜底刷 %s 张卡片', fallback_plan.card_num)
+        return fallback_plan
 
 
 def __debug():
