@@ -64,10 +64,13 @@ class ChargePlanApp(ZApplication):
 
     def execute_plan_once(self, plan: ChargePlanItem) -> OperationResult:
         """只执行指定临时计划，不读取或修改普通计划，也不使用恢复电量资源"""
+        original_allow_restore_charge = plan.allow_restore_charge
+        plan.allow_restore_charge = False
         self._run_only_plan = plan
         try:
             return self.execute()
         finally:
+            plan.allow_restore_charge = original_allow_restore_charge
             self._run_only_plan = None
             self.temp_plan = None
 
