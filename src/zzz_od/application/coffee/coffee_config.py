@@ -14,28 +14,28 @@ class CoffeeTransportPoint(Enum):
 
 class CoffeeChooseWay(Enum):
 
-    PLAN_PRIORITY = ConfigItem('优先体力计划', desc='优先选择符合体力计划的咖啡，实战模拟室计划会选浓缩咖啡，没有匹配时选择汀曼特调')
-    TINMAN_ONLY = ConfigItem('汀曼特调', desc='只选择汀曼特调')
+    PLAN_PRIORITY = ConfigItem('优先体力计划', desc='优先选择与未完成体力计划匹配的增益咖啡，没有匹配时选择汀曼特调')
+    TINMAN_ONLY = ConfigItem('汀曼特调', desc='固定选择汀曼特调')
 
 
 class CoffeeChallengeWay(Enum):
 
-    ALL = ConfigItem('全都挑战')
-    ONLY_PLAN = ConfigItem('只挑战体力计划')
-    NONE = ConfigItem('不挑战')
+    ALL = ConfigItem('全都挑战', desc='直接挑战咖啡对应副本一次；未加入体力计划时使用下方数量')
+    ONLY_PLAN = ConfigItem('只挑战体力计划', desc='仅当咖啡对应副本已加入体力计划时挑战一次')
+    NONE = ConfigItem('不挑战', desc='不挑战增益副本，喝完咖啡后直接返回大世界')
 
 
 class CoffeeEndAction(Enum):
 
-    NONE = ConfigItem('不运行体力计划')
-    RUN_CHARGE_PLAN = ConfigItem('运行体力计划')
-    RUN_CHARGE_PLAN_WITH_FALLBACK = ConfigItem('运行体力计划并兜底剩余电量')
+    NONE = ConfigItem('不运行体力计划', desc='返回大世界后结束咖啡计划，不运行体力计划')
+    RUN_CHARGE_PLAN = ConfigItem('运行体力计划', desc='返回大世界后运行完整体力计划')
+    RUN_CHARGE_PLAN_WITH_FALLBACK = ConfigItem('运行体力计划并兜底剩余电量', desc='先运行完整体力计划；剩余20～39电量刷1张，40～59刷2张下方兜底计划')
 
 
 class CoffeeCardNumEnum(Enum):
     # 注意需要跟charge_plan_config.CardNumEnum一致
-    DEFAULT = ConfigItem('默认数量', desc='挑战体力计划外的副本时，按游戏内设数量')
-    NUM_1 = ConfigItem('1', desc='挑战体力计划外的副本时，选择最少数量')
+    DEFAULT = ConfigItem('默认数量', desc='保持游戏内当前选择的卡片数量')
+    NUM_1 = ConfigItem('1', desc='将卡片数量设置为1')
 
 
 class CoffeeConfig(ApplicationConfig):

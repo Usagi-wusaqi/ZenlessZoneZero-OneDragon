@@ -46,30 +46,30 @@ class CoffeeSettingInterface(VerticalScrollInterface, GroupIdMixin):
     def get_content_widget(self) -> QWidget:
         content_widget = Column()
 
-        self.transport_point_opt = ComboBoxSettingCard(icon=FluentIcon.SEND, title='传送地点', options_enum=CoffeeTransportPoint)
+        self.transport_point_opt = ComboBoxSettingCard(icon=FluentIcon.SEND, title='传送地点', content='选择前往的咖啡店', options_enum=CoffeeTransportPoint)
         content_widget.add_widget(self.transport_point_opt)
 
-        self.choose_way_opt = ComboBoxSettingCard(icon=FluentIcon.CALENDAR, title='咖啡选择', options_enum=CoffeeChooseWay)
+        self.choose_way_opt = ComboBoxSettingCard(icon=FluentIcon.CALENDAR, title='咖啡选择', content='选择当天的咖啡匹配方式', options_enum=CoffeeChooseWay)
         content_widget.add_widget(self.choose_way_opt)
 
-        self.challenge_group = ExpandSettingCardGroup(icon=FluentIcon.GAME, title='喝后挑战')
+        self.challenge_group = ExpandSettingCardGroup(icon=FluentIcon.GAME, title='喝后挑战', content=CoffeeChallengeWay.ALL.value.desc)
         content_widget.add_widget(self.challenge_group)
 
         self.challenge_way_opt = ComboBoxSettingCard(icon=FluentIcon.GAME, title='喝后挑战', options_enum=CoffeeChallengeWay)
         self.challenge_way_opt.value_changed.connect(self.on_challenge_way_changed)
         self.challenge_group.addHeaderWidget(self.challenge_way_opt.combo_box)
 
-        self.card_num_opt = ComboBoxSettingCard(icon=FluentIcon.GAME, title='体力计划外的数量', options_enum=CoffeeCardNumEnum)
+        self.card_num_opt = ComboBoxSettingCard(icon=FluentIcon.GAME, title='体力计划外的数量', content='喝后挑战找不到对应体力计划配置时，使用这里设置的卡片数量', options_enum=CoffeeCardNumEnum)
         self.challenge_group.addSettingCard(self.card_num_opt)
 
-        self.predefined_team_opt = ComboBoxSettingCard(icon=FluentIcon.PEOPLE, title='预备编队')
+        self.predefined_team_opt = ComboBoxSettingCard(icon=FluentIcon.PEOPLE, title='预备编队', content='选择喝后挑战使用的编队，游戏内配队会沿用当前队伍')
         self.predefined_team_opt.value_changed.connect(self.on_predefined_team_changed)
         self.challenge_group.addSettingCard(self.predefined_team_opt)
 
-        self.auto_battle_opt = ComboBoxSettingCard(icon=FluentIcon.GAME, title='自动战斗')
+        self.auto_battle_opt = ComboBoxSettingCard(icon=FluentIcon.GAME, title='自动战斗', content='仅选择游戏内配队时生效，其他预备编队使用各自的自动战斗配置')
         self.challenge_group.addSettingCard(self.auto_battle_opt)
 
-        self.end_action_group = ExpandSettingCardGroup(icon=FluentIcon.CALENDAR, title='结束后处理')
+        self.end_action_group = ExpandSettingCardGroup(icon=FluentIcon.CALENDAR, title='结束后处理', content=CoffeeEndAction.NONE.value.desc)
         content_widget.add_widget(self.end_action_group)
 
         self.end_action_opt = ComboBoxSettingCard(icon=FluentIcon.CALENDAR, title='结束后处理', options_enum=CoffeeEndAction)
@@ -78,6 +78,7 @@ class CoffeeSettingInterface(VerticalScrollInterface, GroupIdMixin):
 
         self.fallback_plan_opt = DoubleRewardEventConfigCard(self.ctx, category_name='实战模拟室')
         self.fallback_plan_opt.titleLabel.setText('实战模拟室兜底计划')
+        self.fallback_plan_opt.setContent('剩余20～39电量刷1张，40～59刷2张；不计入体力计划次数')
         self.fallback_plan_opt.changed.connect(self.set_fallback_plan)
         self.end_action_group.addSettingCard(self.fallback_plan_opt)
 
@@ -120,6 +121,8 @@ class CoffeeSettingInterface(VerticalScrollInterface, GroupIdMixin):
         self.on_end_action_changed(0, self.config.end_action)
 
     def on_challenge_way_changed(self, idx: int, value: str) -> None:
+        desc = next(item.value.desc for item in CoffeeChallengeWay if item.value.value == value)
+        self.challenge_group.card.setContent(desc)
         challenge_enabled = value != CoffeeChallengeWay.NONE.value.value
         self.card_num_opt.setEnabled(value == CoffeeChallengeWay.ALL.value.value)
         self.predefined_team_opt.setEnabled(challenge_enabled)
@@ -130,6 +133,8 @@ class CoffeeSettingInterface(VerticalScrollInterface, GroupIdMixin):
         self.auto_battle_opt.setVisible(team_idx == -1)
 
     def on_end_action_changed(self, idx: int, value: str) -> None:
+        desc = next(item.value.desc for item in CoffeeEndAction if item.value.value == value)
+        self.end_action_group.card.setContent(desc)
         self.fallback_plan_opt.setEnabled(value == CoffeeEndAction.RUN_CHARGE_PLAN_WITH_FALLBACK.value.value)
 
     def set_fallback_plan(self, plan: ChargePlanItem) -> None:
