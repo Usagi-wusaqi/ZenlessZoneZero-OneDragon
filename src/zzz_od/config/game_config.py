@@ -6,13 +6,6 @@ from one_dragon.base.controller.pc_button.ds4_button_controller import Ds4Button
 from one_dragon.base.controller.pc_button.xbox_button_controller import XboxButtonEnum
 
 
-class ControlMethodEnum(Enum):
-
-    KEYBOARD = ConfigItem('键鼠', 'keyboard')
-    XBOX = ConfigItem('Xbox', 'xbox')
-    DS4 = ConfigItem('DS4', 'ds4')
-
-
 class GamepadTypeEnum(Enum):
 
     XBOX = ConfigItem('Xbox', 'xbox')
@@ -244,7 +237,7 @@ class GameConfig(BasicGameConfig):
         """获取指定控制方式的所有按键映射。
 
         Args:
-            control_method: ControlMethodEnum 的值，如 'keyboard' / 'xbox' / 'ds4'。
+            control_method: 控制器类型，如 'keyboard' / 'xbox' / 'ds4'。
 
         Returns:
             {action_name: key_value}，如 {'dodge': 'shift', 'interact': 'f', ...}
