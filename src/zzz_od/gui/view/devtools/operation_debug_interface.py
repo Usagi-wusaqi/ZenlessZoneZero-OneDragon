@@ -88,6 +88,7 @@ class OperationDebugInterface(AppRunInterface):
         self._update_auto_battle_config_opts()
         self.config_opt.setValue(self.config.operation_template)
         self.background_mode_opt.init_with_adapter(self.ctx.battle_assistant_config.get_prop_adapter('background_mode'))
+        self._on_background_mode_changed(self.ctx.battle_assistant_config.background_mode)
         self.repeat_opt.setValue(self.config.repeat_enabled)
 
     def _update_auto_battle_config_opts(self) -> None:
@@ -130,7 +131,10 @@ class OperationDebugInterface(AppRunInterface):
     def _on_background_mode_changed(self, value: bool) -> None:
         if value and not pc_button_utils.is_vgamepad_installed():
             self.background_mode_opt.setValue(False, emit_signal=False)
-            self.ctx.battle_assistant_config.background_mode = False
+            if self.background_mode_opt.adapter is not None:
+                self.background_mode_opt.adapter.set_value(False)
+            else:
+                self.ctx.battle_assistant_config.background_mode = False
             InfoBar.warning(
                 title='后台模式不可用',
                 content='未检测到 vgamepad / ViGEmBus，请先安装虚拟手柄驱动',

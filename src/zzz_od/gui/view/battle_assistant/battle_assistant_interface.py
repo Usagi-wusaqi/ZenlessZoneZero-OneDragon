@@ -341,7 +341,10 @@ class BattleAssistantInterface(AppRunInterface):
     def _on_background_mode_changed(self, value: bool) -> None:
         if value and not pc_button_utils.is_vgamepad_installed():
             self.background_mode_opt.setValue(False, emit_signal=False)
-            self.ctx.battle_assistant_config.background_mode = False
+            if self.background_mode_opt.adapter is not None:
+                self.background_mode_opt.adapter.set_value(False)
+            else:
+                self.ctx.battle_assistant_config.background_mode = False
             InfoBar.warning(
                 title='后台模式不可用',
                 content='未检测到 vgamepad / ViGEmBus，请先安装虚拟手柄驱动',
@@ -356,6 +359,7 @@ class BattleAssistantInterface(AppRunInterface):
     def on_interface_shown(self) -> None:
         AppRunInterface.on_interface_shown(self)
         self._init_config_cards()
+        self._on_background_mode_changed(self.ctx.battle_assistant_config.background_mode)
         self.ctx.listen_event(AutoBattleApp.EVENT_OP_LOADED, self._on_auto_op_loaded_event)
 
     def on_interface_hidden(self) -> None:
