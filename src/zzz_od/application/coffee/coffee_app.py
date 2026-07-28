@@ -255,6 +255,9 @@ class CoffeeApp(ZApplication):
         :param plan:
         :return:
         """
+        if plan.category_name == '合成电池':
+            return False
+
         if coffee.coffee_name == '浓缩咖啡':
             return False
 
