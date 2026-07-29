@@ -6,7 +6,7 @@
 #
 # 有冲突的 PR 直接跳过(打上 `test-conflict` 标签),不影响后续 PR;
 # 每次都从 origin/main 重新开始,所以 test 分支上不会残留历史垃圾。
-name: Update Test Branch
+name: Build Test Branch
 
 on:
   schedule:
@@ -32,7 +32,7 @@ env:
   CONFLICT_LABEL: test-conflict
 
 jobs:
-  update-test-branch:
+  build-test-branch:
     runs-on: ubuntu-latest
     if: ${{ github.repository_owner == 'OneDragon-Anything' }}
     steps:
@@ -215,6 +215,18 @@ jobs:
           } | git commit -q -F - --author="$author"
           applied+=("$pr|$author|$title")
         done
+
+        if [ "${#applied[@]}" -gt 0 ]; then
+          {
+            echo '[测试] 当前测试内容'
+            echo
+            for item in "${applied[@]}"; do
+              rest="${item#*|}"
+              title="${rest#*|}"
+              printf -- '- %s\n' "$title"
+            done
+          } | git commit --allow-empty -q -F -
+        fi
 
         if ! git push --force origin test; then
           {
