@@ -60,7 +60,7 @@ class WorldPatrolRunRoute(ZOperation):
         route: WorldPatrolRoute,  # 巡逻路线数据，包含移动点位和操作指令
         start_idx: int = 0,  # 从第几个指令开始执行（断点续传用）
         is_restarted: bool = False,  # 是否重启模式（影响容错策略）
-    ):
+    ) -> None:
         ZOperation.__init__(self, ctx, op_name=gt('运行路线'))
 
         self.config: WorldPatrolConfig = self.ctx.run_context.get_config(
@@ -96,7 +96,7 @@ class WorldPatrolRunRoute(ZOperation):
         self.ui_disappear_start_time: float = 0  # 疑似界面消失的开始时间
 
         # 自适应转向算法状态变量
-        self.turn_compensator = AngleTurnCompensator(self.ctx.controller)
+        self.turn_compensator: AngleTurnCompensator = AngleTurnCompensator(self.ctx.controller)
         self.last_angle: float | None = None  # 上一次获取到的人物朝向
         self.last_angle_diff_command: float | None = None  # 上一次下发的转向指令
 
@@ -372,7 +372,7 @@ class WorldPatrolRunRoute(ZOperation):
             self.stuck_pos_start_time = 0
         return False
 
-    def _turn_and_move(self, target_pos: Point, mini_map: MiniMapWrapper):
+    def _turn_and_move(self, target_pos: Point, mini_map: MiniMapWrapper) -> None:
         """
         根据目标点执行转向和移动
         """
@@ -597,7 +597,7 @@ class WorldPatrolRunRoute(ZOperation):
         self.ctx.controller.stop_moving_forward()
 
 
-def __debug(area_full_id: str, route_idx: int):
+def __debug(area_full_id: str, route_idx: int) -> None:
     ctx = ZContext()
     ctx.init()
     ctx.world_patrol_service.load_data()
