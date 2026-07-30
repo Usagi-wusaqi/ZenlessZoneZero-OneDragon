@@ -53,6 +53,7 @@ class WorldPatrolRunRoute(ZOperation):
     """
 
     STATUS_UI_DISAPPEARED: str = '疑似界面消失卡死'
+    REACH_DISTANCE: int = 10  # 到达、回溯成功和卡住判定的统一半径
     POSITION_CHECK_INTERVAL: float = 0.3  # 移动定位的固定轮次间隔
 
     def __init__(
@@ -99,9 +100,6 @@ class WorldPatrolRunRoute(ZOperation):
         self.turn_compensator: AngleTurnCompensator = AngleTurnCompensator(self.ctx.controller)
         self.last_angle: float | None = None  # 上一次获取到的人物朝向
         self.last_angle_diff_command: float | None = None  # 上一次下发的转向指令
-
-    # 距离判定阈值（用于到达/回溯成功/卡住判定的统一半径）
-    REACH_DISTANCE: int = 10
 
     @operation_node(name='初始回到大世界', is_start_node=True)
     def back_at_first(self) -> OperationRoundResult:
