@@ -84,7 +84,6 @@ class WorldPatrolRunRoute(ZOperation):
 
         # 执行脱困状态变量
         self.stuck_move_direction: int = 0  # 脱困使用的方向
-        self.route_op_start_time: float = 0  # 某个指令的开始时间
         self.no_pos_start_time: float = 0  # 计算坐标失败的开始时间
         self.stuck_pos: Point = self.current_pos  # 被困的坐标
         self.stuck_pos_start_time: float = 0  # 被困坐标的开始时间
@@ -141,10 +140,7 @@ class WorldPatrolRunRoute(ZOperation):
     @node_from(from_name='自动战斗结束')
     @operation_node(name='运行指令')
     def run_op(self) -> OperationRoundResult:
-        """
-        执行一个个的指令
-        Returns:
-        """
+        """执行当前路线指令"""
         if self.current_idx >= len(self.route.op_list):
             return self.round_success(status='全部指令已完成')
 
@@ -158,8 +154,7 @@ class WorldPatrolRunRoute(ZOperation):
         if op.op_type == WorldPatrolOpType.MOVE:
             is_next_move = next_op is not None and next_op.op_type == WorldPatrolOpType.MOVE
             return self._handle_move(op, mini_map, is_next_move)
-        else:
-            return self.round_fail(status=f'未知指令类型 {op.op_type}')
+        return self.round_fail(status=f'未知指令类型 {op.op_type}')
 
     def _handle_move(
         self,
@@ -167,9 +162,7 @@ class WorldPatrolRunRoute(ZOperation):
         mini_map: MiniMapWrapper,
         is_next_move: bool,
     ) -> OperationRoundResult:
-        """
-        处理移动指令的核心逻辑
-        """
+        """处理移动指令的核心逻辑"""
         # 1. 更新当前位置，并处理无法计算坐标/卡住超限的情况
         result = self._update_current_pos(mini_map)
         if result is not None:
