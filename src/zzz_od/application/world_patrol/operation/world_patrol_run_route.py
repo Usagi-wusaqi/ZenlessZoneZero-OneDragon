@@ -56,6 +56,7 @@ class WorldPatrolRunRoute(ZOperation):
     STATUS_UI_DISAPPEARED: str = '疑似界面消失卡死'
     REACH_DISTANCE: int = 10  # 到达、回溯成功和卡住判定的统一半径
     POSITION_CHECK_INTERVAL: float = 0.3  # 移动定位的固定轮次间隔
+    MAX_UNSTUCK_ATTEMPTS: int = 6
     UNSTUCK_ACTION_SEQUENCES: tuple[tuple[tuple[str, int], ...], ...] = (
         (('a', 1),),
         (('d', 1),),
@@ -101,6 +102,7 @@ class WorldPatrolRunRoute(ZOperation):
         self.pos_stuck_attempts: int = 0  # 有坐标但卡住的连续脱困尝试次数
         self.unstuck_actions: tuple[tuple[str, int], ...] = ()  # 当前脱困动作序列
         self.unstuck_action_deadline: float = 0  # 当前脱困动作截止时间
+        self.unstuck_counts_as_attempt: bool = False  # 当前脱困动作完成后是否计数
         self._unstuck_lock: Lock = Lock()
 
         # 自动战斗状态变量
@@ -212,7 +214,7 @@ class WorldPatrolRunRoute(ZOperation):
         )
 
     def _update_current_pos(self, mini_map: MiniMapWrapper) -> OperationRoundResult | None:
-        """更新当前位置，并处理定位失败和卡住状态"""
+        """更新当前位置，并处理定位和脱困状态"""
         next_pos = self._calculate_next_pos(mini_map)
 
         result = self._handle_unstuck_round(next_pos)
@@ -227,6 +229,8 @@ class WorldPatrolRunRoute(ZOperation):
             return self.round_fail(status='有坐标但卡住，重启当前路线')
 
         self.current_pos = next_pos
+        if self.unstuck_actions:
+            return self.round_wait(status='正在脱困', wait_round_time=self.POSITION_CHECK_INTERVAL)
         return None
 
     def _calculate_next_pos(self, mini_map: MiniMapWrapper) -> Point | None:
@@ -267,6 +271,10 @@ class WorldPatrolRunRoute(ZOperation):
             self.current_pos = next_pos
         if self._advance_unstuck_move():
             return self.round_wait(status='正在脱困', wait_round_time=self.POSITION_CHECK_INTERVAL)
+        if self.pos_stuck_attempts >= self.MAX_UNSTUCK_ATTEMPTS:
+            log.info('[with-pos]卡住，重启当前路线')
+            self.pos_stuck_attempts = 0
+            return self.round_fail(status='有坐标但卡住，重启当前路线')
         if next_pos is None:
             self.ctx.controller.turn_vertical_by_distance(300)
             return self.round_wait(status='正在脱困', wait_round_time=self.POSITION_CHECK_INTERVAL)
@@ -282,7 +290,7 @@ class WorldPatrolRunRoute(ZOperation):
         elif no_pos_seconds > 4.5:
             if self.is_restarted:
                 return self.round_fail(status='坐标计算失败，重启当前路线')
-            self._start_unstuck_move()
+            self._start_unstuck_move(with_pos=False)
             return self.round_wait(status='正在脱困', wait_round_time=self.POSITION_CHECK_INTERVAL)
         elif no_pos_seconds > 1.5:
             self.ctx.controller.stop_moving_forward()
@@ -375,12 +383,7 @@ class WorldPatrolRunRoute(ZOperation):
                     log.error('[with-pos]再次卡住，跳过当前路线')
                     return True
                 if not self._try_start_backtrack():
-                    self._do_unstuck_move('with-pos')
-                    self.pos_stuck_attempts += 1
-                    if self.pos_stuck_attempts >= 6:  # 脱困最大尝试次数
-                        log.info('[with-pos]卡住，重启当前路线')
-                        self.pos_stuck_attempts = 0
-                        return True
+                    self._start_unstuck_move(with_pos=True)
                 # 开始回溯或脱困后重置卡点计时，避免连续触发
                 self._reset_stuck_tracking()
         else:
@@ -480,13 +483,18 @@ class WorldPatrolRunRoute(ZOperation):
         self._reset_stuck_tracking()
         return reached
 
-    def _start_unstuck_move(self) -> None:
+    def _start_unstuck_move(self, with_pos: bool) -> None:
         """启动一次脱困动作，后续按截图轮次推进按键序列"""
         with self._unstuck_lock:
             self.ctx.controller.stop_moving_forward()
             # 脱困前，切换到下一位（利用不同角色体型/站位尝试摆脱卡点）
             self.ctx.auto_battle_context.switch_next()
-            log.info(f'[no-pos] 本次脱困方向 {self.stuck_move_direction}')
+            self.unstuck_counts_as_attempt = with_pos
+            if with_pos:
+                attempt = self.pos_stuck_attempts + 1
+                log.info(f'[with-pos] 脱困尝试 {attempt}/{self.MAX_UNSTUCK_ATTEMPTS}，方向 {self.stuck_move_direction}')
+            else:
+                log.info(f'[no-pos] 本次脱困方向 {self.stuck_move_direction}')
 
             # 脱困会横移或后退，不能沿用正常前进的方向判断和转向学习样本
             self.last_angle = None
@@ -501,6 +509,7 @@ class WorldPatrolRunRoute(ZOperation):
         """推进一个脱困按键，返回是否仍在脱困"""
         with self._unstuck_lock:
             if not self.unstuck_actions:
+                self.unstuck_counts_as_attempt = False
                 return False
 
             now = time.time()
@@ -513,6 +522,9 @@ class WorldPatrolRunRoute(ZOperation):
                 self.unstuck_action_deadline = 0
 
             if not self.unstuck_actions:
+                if self.unstuck_counts_as_attempt:
+                    self.pos_stuck_attempts += 1
+                self.unstuck_counts_as_attempt = False
                 return False
 
             key, duration = self.unstuck_actions[0]
@@ -528,41 +540,7 @@ class WorldPatrolRunRoute(ZOperation):
                 getattr(self.ctx.controller, f'move_{key}')(release=True)
             self.unstuck_actions = ()
             self.unstuck_action_deadline = 0
-
-    def _do_unstuck_move(self, tag: str):
-        """
-        执行一次脱困动作，自动切换角色并按 stuck_move_direction 选择方向
-        tag: 日志标记（如 'with-pos' 或 'no-pos')
-        """
-        # 脱困前，切换到下一位（利用不同角色体型/站位尝试摆脱卡点）
-        self.ctx.auto_battle_context.switch_next()
-        if tag == 'with-pos':
-            log.info(f'[{tag}] 脱困尝试 {self.pos_stuck_attempts + 1}/6，方向 {self.stuck_move_direction}')
-        else:
-            log.info(f'[{tag}] 本次脱困方向 {self.stuck_move_direction}')
-        if self.stuck_move_direction == 0:  # 向左走
-            self.ctx.controller.move_a(press=True, press_time=1, release=True)
-        elif self.stuck_move_direction == 1:  # 向右走
-            self.ctx.controller.move_d(press=True, press_time=1, release=True)
-        elif self.stuck_move_direction == 2:  # 后左前 1秒
-            self.ctx.controller.move_s(press=True, press_time=1, release=True)
-            self.ctx.controller.move_a(press=True, press_time=1, release=True)
-            self.ctx.controller.move_w(press=True, press_time=1, release=True)
-        elif self.stuck_move_direction == 3:  # 后右前 1秒
-            self.ctx.controller.move_s(press=True, press_time=1, release=True)
-            self.ctx.controller.move_d(press=True, press_time=1, release=True)
-            self.ctx.controller.move_w(press=True, press_time=1, release=True)
-        elif self.stuck_move_direction == 4:  # 后左前 2秒
-            self.ctx.controller.move_s(press=True, press_time=2, release=True)
-            self.ctx.controller.move_a(press=True, press_time=2, release=True)
-            self.ctx.controller.move_w(press=True, press_time=2, release=True)
-        elif self.stuck_move_direction == 5:  # 后右前 2秒
-            self.ctx.controller.move_s(press=True, press_time=2, release=True)
-            self.ctx.controller.move_d(press=True, press_time=2, release=True)
-            self.ctx.controller.move_w(press=True, press_time=2, release=True)
-        self.stuck_move_direction += 1
-        if self.stuck_move_direction > 5:
-            self.stuck_move_direction = 0
+            self.unstuck_counts_as_attempt = False
 
     @node_from(from_name='运行指令', status='进入战斗')
     @operation_node(name='初始化自动战斗')
