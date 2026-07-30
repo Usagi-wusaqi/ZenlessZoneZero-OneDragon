@@ -107,7 +107,7 @@ class WorldPatrolRunRoute(ZOperation):
     def back_at_first(self) -> OperationRoundResult:
         """运行路线前：确保当前在大世界画面，再进行后续传送"""
         if self.current_idx != 0:
-            return self.round_success(status='DEBUG')
+            return self.round_success(status='断点续跑')
 
         op = BackToNormalWorld(self.ctx)
         return self.round_by_op_result(op.execute())
@@ -119,7 +119,7 @@ class WorldPatrolRunRoute(ZOperation):
         op = TransportBy3dMap(self.ctx, self.route.tp_area, self.route.tp_name)
         return self.round_by_op_result(op.execute())
 
-    @node_from(from_name='初始回到大世界', status='DEBUG')
+    @node_from(from_name='初始回到大世界', status='断点续跑')
     @node_from(from_name='传送')
     @operation_node(name='设置起始坐标')
     def set_start_idx(self) -> OperationRoundResult:
