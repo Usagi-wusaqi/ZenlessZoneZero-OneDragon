@@ -122,7 +122,7 @@ class WorldPatrolRunRoute(ZOperation):
     @node_from(from_name='初始回到大世界', status='断点续跑')
     @node_from(from_name='传送')
     @operation_node(name='设置起始坐标')
-    def set_start_idx(self) -> OperationRoundResult:
+    def set_start_pos(self) -> OperationRoundResult:
         # 根据路线与当前指令下标，计算起点坐标（先用局部变量避免给字段赋 None）
         start_pos = self.ctx.world_patrol_service.get_route_pos_before_op_idx(self.route, self.current_idx)
         if start_pos is None:
@@ -157,11 +157,11 @@ class WorldPatrolRunRoute(ZOperation):
 
         if op.op_type == WorldPatrolOpType.MOVE:
             is_next_move = next_op is not None and next_op.op_type == WorldPatrolOpType.MOVE
-            return self.handle_move(op, mini_map, is_next_move)
+            return self._handle_move(op, mini_map, is_next_move)
         else:
             return self.round_fail(status=f'未知指令类型 {op.op_type}')
 
-    def handle_move(
+    def _handle_move(
         self,
         op: WorldPatrolOperation,
         mini_map: MiniMapWrapper,
