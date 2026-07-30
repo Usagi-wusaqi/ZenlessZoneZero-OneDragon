@@ -53,6 +53,7 @@ class WorldPatrolRunRoute(ZOperation):
     """
 
     STATUS_UI_DISAPPEARED: str = '疑似界面消失卡死'
+    POSITION_CHECK_INTERVAL: float = 0.3  # 移动定位的固定轮次间隔
 
     def __init__(
         self,
@@ -195,24 +196,32 @@ class WorldPatrolRunRoute(ZOperation):
                 self.pos_stuck_attempts = 0
             return self.round_wait(status=f'已到达目标点 {target_pos}')
 
-        return self.round_wait(status=f'当前坐标 {self.current_pos} 角度 {mini_map.view_angle} 目标点 {target_pos}',
-                       wait_round_time=0.3,  # 这个时间设置太小的话，会出现转向之后方向判断不准
-                       )
+        return self.round_wait(
+            status=f'当前坐标 {self.current_pos} 角度 {mini_map.view_angle} 目标点 {target_pos}',
+            wait_round_time=self.POSITION_CHECK_INTERVAL,  # 太小会导致转向后的方向判断不准
+        )
 
-    def _update_current_pos(self, mini_map: MiniMapWrapper) -> Point | OperationRoundResult | None:
-        """
-        更新当前位置，并处理无法计算坐标的情况
-        :param mini_map: 小地图信息
-        :return: 成功则返回新的坐标点，失败则返回 OperationRoundResult
-        """
+    def _update_current_pos(self, mini_map: MiniMapWrapper) -> OperationRoundResult | None:
+        """更新当前位置，并处理定位失败和卡住状态"""
+        next_pos = self._calculate_next_pos(mini_map)
+        if next_pos is None:
+            return self._handle_no_pos()
+
+        self.no_pos_start_time = 0
+        if self._process_stuck_with_pos(next_pos):
+            return self.round_fail(status='有坐标但卡住，重启当前路线')
+
+        self.current_pos = next_pos
+        return None
+
+    def _calculate_next_pos(self, mini_map: MiniMapWrapper) -> Point | None:
+        """计算并校验本轮坐标"""
         if self.current_large_map is None:
             log.error('缺少大地图数据，无法计算坐标')
             raise RuntimeError('缺少大地图数据，路线配置错误')
+
         # 基于上一次的已知位置，估算本次可能出现的搜索范围矩形，搜索范围再加上小地图尺寸
-        if self.no_pos_start_time == 0:
-            move_seconds = 0
-        else:
-            move_seconds = self.last_screenshot_time - self.no_pos_start_time
+        move_seconds = 0 if self.no_pos_start_time == 0 else self.last_screenshot_time - self.no_pos_start_time
         move_seconds += 1  # 给出一个保守的前移估计
         move_distance = move_seconds * 50  # 移动速度估值
         mini_map_d = mini_map.rgb.shape[0]
@@ -230,38 +239,25 @@ class WorldPatrolRunRoute(ZOperation):
             possible_rect,
         )
         if next_pos is not None and not self._is_next_pos_valid(next_pos, move_distance):
-            next_pos = None
-
-        if next_pos is None:
-            # 处理无法计算坐标的情况
-            no_pos_seconds = 0 if self.no_pos_start_time == 0 else self.last_screenshot_time - self.no_pos_start_time
-            if self.no_pos_start_time == 0:
-                # 首次进入无坐标态，记录起始时间
-                self.no_pos_start_time = self.last_screenshot_time
-            # 达到重启阈值：请求重启
-            elif no_pos_seconds > 13.5:
-                return self.round_fail(status='坐标计算失败，重启当前路线')
-            # 达到脱困阈值：执行脱困（不计数）
-            elif no_pos_seconds > 4.5:
-                # 如果是重启后的路线，再次卡住时直接跳过，不再尝试脱困
-                if self.is_restarted:
-                    return self.round_fail(status='坐标计算失败，重启当前路线')
-                self._do_unstuck_move('no-pos')
-            # 达到停止阈值：停止前进，避免盲走
-            elif no_pos_seconds > 1.5:
-                self.ctx.controller.stop_moving_forward()
-
-            self.ctx.controller.turn_vertical_by_distance(300)
-
-            return self.round_wait(status=f'坐标计算失败 持续 {no_pos_seconds:.2f} 秒')
-        else:
-            self.no_pos_start_time = 0  # 成功获取坐标，重置计时器
-
-            if self._process_stuck_with_pos(next_pos):
-                return self.round_fail(status='有坐标但卡住，重启当前路线')
-
-            self.current_pos = next_pos
             return None
+        return next_pos
+
+    def _handle_no_pos(self) -> OperationRoundResult:
+        """按无坐标持续时间执行停止、脱困或路线重试"""
+        no_pos_seconds = 0 if self.no_pos_start_time == 0 else self.last_screenshot_time - self.no_pos_start_time
+        if self.no_pos_start_time == 0:
+            self.no_pos_start_time = self.last_screenshot_time
+        elif no_pos_seconds > 13.5:
+            return self.round_fail(status='坐标计算失败，重启当前路线')
+        elif no_pos_seconds > 4.5:
+            if self.is_restarted:
+                return self.round_fail(status='坐标计算失败，重启当前路线')
+            self._do_unstuck_move('no-pos')
+        elif no_pos_seconds > 1.5:
+            self.ctx.controller.stop_moving_forward()
+
+        self.ctx.controller.turn_vertical_by_distance(300)
+        return self.round_wait(status=f'坐标计算失败 持续 {no_pos_seconds:.2f} 秒')
 
     def _is_next_pos_valid(self, next_pos: Point, move_distance: float) -> bool:
         """
