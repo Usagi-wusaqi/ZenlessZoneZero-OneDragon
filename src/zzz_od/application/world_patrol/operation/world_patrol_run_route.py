@@ -170,7 +170,7 @@ class WorldPatrolRunRoute(ZOperation):
             return result
 
         # 回溯态维护与目标点选择
-        if self.backtrack_active and self._backtrack_step(self.current_pos, emit_log=True) == 'reached':
+        if self.backtrack_active and self._advance_backtrack(self.current_pos):
             return self.round_wait(status='回溯成功，已到达回溯点')
 
         # 2. 执行转向和移动
@@ -326,11 +326,10 @@ class WorldPatrolRunRoute(ZOperation):
             return -allow_angle_diff <= move_angle_diff <= self.last_angle_diff_command + allow_angle_diff
 
     def _process_stuck_with_pos(self, next_pos: Point) -> bool:
-        """
-        处理有坐标但卡住的情况
-        Returns:
-            bool: True 表示达到脱困上限，重启当前路线；False 表示已处理或无需处理
-        """
+        """处理有坐标但卡住的情况，返回是否需要重启路线"""
+        if self.backtrack_active:
+            return False
+
         # 疑似卡住的阈值（若当时移动较慢或转向未完成，过小可能误判，过大转悠太久）
         if cal_utils.distance_between(next_pos, self.stuck_pos) < self.REACH_DISTANCE:
             if self.stuck_pos_start_time == 0:
@@ -341,25 +340,24 @@ class WorldPatrolRunRoute(ZOperation):
                 if self.is_restarted:
                     log.error('[with-pos]再次卡住，跳过当前路线')
                     return True
-                # 先尝试智能回溯
-                status = self._backtrack_step(next_pos, emit_log=True)
-                if status in ('unavailable', 'expired'):
-                    # 回溯超时/跳过，则尝试执行脱困（计数）
+                if not self._try_start_backtrack():
                     self._do_unstuck_move('with-pos')
                     self.pos_stuck_attempts += 1
                     if self.pos_stuck_attempts >= 6:  # 脱困最大尝试次数
                         log.info('[with-pos]卡住，重启当前路线')
                         self.pos_stuck_attempts = 0
                         return True
-                elif status == 'started':
-                    pass
-                # 成功执行一次脱困后，重置卡点计时，避免连续触发
-                self.stuck_pos = Point(0, 0)
-                self.stuck_pos_start_time = 0
+                # 开始回溯或脱困后重置卡点计时，避免连续触发
+                self._reset_stuck_tracking()
         else:
             self.stuck_pos = next_pos
             self.stuck_pos_start_time = 0
         return False
+
+    def _reset_stuck_tracking(self) -> None:
+        """重置有坐标但连续不动的判断基准"""
+        self.stuck_pos = Point(0, 0)
+        self.stuck_pos_start_time = 0
 
     def _turn_and_move(self, target_pos: Point, mini_map: MiniMapWrapper) -> None:
         """
@@ -399,62 +397,54 @@ class WorldPatrolRunRoute(ZOperation):
         # 开始移动
         self.ctx.controller.start_moving_forward()
 
-    def _backtrack_step(self, next_pos: Point, emit_log: bool = False) -> str:
-        """
-        智能回溯：推进一次“折返到上一个目标点”的状态机
-        :param next_pos: 当前计算出的角色坐标
-        :param emit_log: 是否输出通用日志
-        :return:状态字符串：'started'（开始回溯）、'ongoing'（正在回溯）、'reached'（回溯成功）、
-                           'expired'（回溯超时）、'unavailable'（回溯跳过）
-        """
-        now = self.last_screenshot_time
+    def _try_start_backtrack(self) -> bool:
+        """尝试开始回溯，返回是否找到可用回溯点"""
+        prev_pos = self.ctx.world_patrol_service.get_route_pos_before_op_idx(self.route, self.current_idx)
+        if prev_pos is None:
+            prev_pos = self.route_start_pos
+        last_target = self.last_backtrack_target
+        same_as_last = (
+            prev_pos is not None
+            and last_target is not None
+            and prev_pos.x == last_target.x
+            and prev_pos.y == last_target.y
+        )
+        if prev_pos is None or same_as_last:
+            if same_as_last:
+                log.info('回溯跳过，回溯点与上次相同')
+            return False
 
-        # 尝试启动回溯：决定 unavailable 或 started
-        if not self.backtrack_active or self.backtrack_target is None:
-            prev_pos = self.ctx.world_patrol_service.get_route_pos_before_op_idx(self.route, self.current_idx)
-            if prev_pos is None and self.route_start_pos is not None:
-                prev_pos = self.route_start_pos
-            last_target = self.last_backtrack_target
-            same_as_last = (
-                prev_pos is not None
-                and last_target is not None
-                and prev_pos.x == last_target.x
-                and prev_pos.y == last_target.y
-            )
-            if prev_pos is None or same_as_last:
-                if emit_log and same_as_last:
-                    log.info('回溯跳过，回溯点与上次相同')
-                return 'unavailable'
+        log.info(f'尝试回溯到上一个目标点 {prev_pos}')
+        self.backtrack_active = True
+        self.backtrack_target = prev_pos
+        self.backtrack_deadline = self.last_screenshot_time + 15.0
+        self.ctx.controller.start_moving_forward()
+        return True
 
-            if emit_log:
-                log.info(f'尝试回溯到上一个目标点 {prev_pos}')
-            self.backtrack_active = True
-            self.backtrack_target = prev_pos
-            self.backtrack_deadline = now + 15.0
-            self.ctx.controller.start_moving_forward()
-            return 'started'
-
-        # 维护进行中的回溯：先返回 ongoing，再处理 reached / expired
-        distance = cal_utils.distance_between(next_pos, self.backtrack_target)
-        reached = distance < self.REACH_DISTANCE
-        expired = now >= self.backtrack_deadline
-        if not reached and not expired:
-            if emit_log:
-                log.debug(f'回溯进行中，当前距离目标 {distance:.2f}，剩余时间 {self.backtrack_deadline - now:.1f}秒')
-            return 'ongoing'
+    def _advance_backtrack(self, next_pos: Point) -> bool:
+        """推进正在进行的回溯，返回是否已到达回溯点"""
         target = self.backtrack_target
+        assert target is not None
+
+        distance = cal_utils.distance_between(next_pos, target)
+        reached = distance < self.REACH_DISTANCE
+        expired = self.last_screenshot_time >= self.backtrack_deadline
+        if not reached and not expired:
+            left_seconds = self.backtrack_deadline - self.last_screenshot_time
+            log.debug(f'回溯进行中，当前距离目标 {distance:.2f}，剩余时间 {left_seconds:.1f}秒')
+            return False
+
         if reached:
             self.ctx.controller.stop_moving_forward()
-            if emit_log:
-                log.info(f'回溯成功，已到达 {target}')
-        elif emit_log:
+            log.info(f'回溯成功，已到达 {target}')
+        else:
             log.info('回溯超时')
-        # 清理状态
-        self.last_backtrack_target = self.backtrack_target
+        self.last_backtrack_target = target
         self.backtrack_active = False
         self.backtrack_target = None
         self.backtrack_deadline = 0
-        return 'reached' if reached else 'expired'
+        self._reset_stuck_tracking()
+        return reached
 
     def _do_unstuck_move(self, tag: str):
         """
