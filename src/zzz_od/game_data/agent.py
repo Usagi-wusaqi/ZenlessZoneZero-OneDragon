@@ -543,7 +543,7 @@ class AgentEnum(Enum):
         RareTypeEnum.S,
         AgentTypeEnum.ANOMALY,
         DmgTypeEnum.LUMIFLUX,
-        ['remielle', 'remielle_dark'],
+        ['remielle', 'remielle_dark', 'remielle_dark_veil', 'remielle_seashade'],
         state_list=[
             AgentStateDef(
                 '蕾米埃尔-浮晖',
