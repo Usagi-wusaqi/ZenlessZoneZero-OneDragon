@@ -7,7 +7,7 @@
 - **开发环境与工具**：[快速开始](setup/quickstart.md) · [相关仓库](setup/repositories.md) · [AI 编码助手接入](setup/ai_coding.md)
 - **编码规范**：[agent_guidelines.md](spec/agent_guidelines.md)
 - **开发流程**：[端到端开发流程](development_workflow.md)
-- **架构设计**：[一条龙整体架构](one_dragon/one_dragon_architecture.md) · [集成启动器 RuntimeLauncher](one_dragon/runtime_launcher.md) · [Git 服务与代码源回退](one_dragon/modules/git_service.md) · [项目工作目录](one_dragon/modules/work_directory.md) · [模块文档](one_dragon/modules/)
+- **架构设计**：[一条龙整体架构](one_dragon/one_dragon_architecture.md) · [集成启动器 RuntimeLauncher](one_dragon/runtime_launcher.md) · [Git 服务与代码源回退](one_dragon/modules/git_service.md) · [资源下载源与候选回退](one_dragon/modules/resource_download.md) · [项目工作目录](one_dragon/modules/work_directory.md) · [模块文档](one_dragon/modules/)
 - **开发指引**：[应用插件开发](guides/application_plugin_guide.md) · [应用设置界面](guides/application_setting_guide.md)
 - **游戏业务**：[自动战斗](zzz/auto_battle.md) · [进游戏](zzz/enter_game.md) · [转向与灵敏度](zzz/turn_sensitivity.md) · [功能模块](zzz/application/) · [迷失之地](zzz/application/lost_void/) · [后端服务层](zzz/backend/) · [截图存档](zzz/screenshot_archive.md)
 - **AI Harness 工程**：[总览与路线图](harness/README.md)
@@ -27,6 +27,8 @@
 #### 1.2.1.多线程
 
 当前使用 onnxruntime-dml 在多线程下同时访问多个session是会出现各种意想不到的异常的，因此需要异步使用onnx session时，需统一使用 `gpu_executor.submit` 来提交，保证只有一个session被访问。
+
+另外，onnx session 的线程池默认会自旋等待，空闲时也占用 CPU。本项目都是间歇调用，统一在创建 session 时关闭自旋（见 `onnxocr/inference_engine.py`、`one_dragon/yolo/onnx_model_loader.py`）。
 
 ### 1.3.测试
 
