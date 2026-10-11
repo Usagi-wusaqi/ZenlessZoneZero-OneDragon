@@ -435,7 +435,7 @@ class ChargePlanInterface(VerticalScrollInterface, GroupIdMixin):
         self.double_reward_group = ExpandSettingCardGroup(
             icon=FluentIcon.FLAG,
             title='多倍活动',
-            content='开启后，自动识别双倍/三倍活动；执行数量取活动剩余数量与当前电量可承担数量的较小值',
+            content='开启后，自动识别并执行多倍活动；执行数量取活动剩余数量与当前电量可承担数量的较小值',
         )
         self.content_widget.add_widget(self.double_reward_group)
 

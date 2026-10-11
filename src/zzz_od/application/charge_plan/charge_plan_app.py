@@ -62,6 +62,7 @@ class ChargePlanApp(ZApplication):
 
     @operation_node(name='开始体力计划', is_start_node=True)
     def start_charge_plan(self) -> OperationRoundResult:
+        # 每轮开始清理临时计划和上轮状态，确保本轮从头选择计划
         self.temp_plan = None
         self.last_tried_plan = None
         self.double_reward_checked = False
@@ -139,6 +140,7 @@ class ChargePlanApp(ZApplication):
         self.ether_battery = ether_battery
         self.run_record.record_current_charge_power(self.battery_charge)
         log.info('剩余电量 %s 储蓄电量 %s 以太电池 %s', self.battery_charge, self.backup_battery_charge, self.ether_battery)
+        # 多倍活动只在本轮首次识别电量后检查一次，后续跳过计划时直接查找下一个计划
         if self.config.double_reward and not self.double_reward_checked:
             self.double_reward_checked = True
             return self.round_success('查看双倍活动')
@@ -146,13 +148,13 @@ class ChargePlanApp(ZApplication):
 
     @staticmethod
     def _is_reward_event(activity_text: str) -> bool:
-        """活动横幅是否包含双倍或三倍奖励。"""
+        """活动横幅是否包含多倍奖励，多倍活动通常为双倍或三倍。"""
         normalized = ''.join(activity_text.split())
-        return any(text in normalized for text in ('双倍', '两倍', '三倍'))
+        return any(text in normalized for text in ('双倍', '二倍', '三倍'))
 
     @staticmethod
     def _get_reward_times(reward_times_text: str) -> int | None:
-        """从「剩余/总数」中识别剩余量，不固定活动总数。"""
+        """从「剩余/总数」中识别剩余量，活动总数仅支持个位数（若有超过10的例外则要加复杂度进行适配）。"""
         digit = str_utils.get_positive_digits(reward_times_text, None)
         if digit is None:
             return None
@@ -164,11 +166,7 @@ class ChargePlanApp(ZApplication):
     @node_from(from_name='识别电量', status='查看双倍活动')
     @operation_node(name='查看双倍活动')
     def check_double_reward_event(self) -> OperationRoundResult:
-        """检查实战模拟室和区域巡防的双倍、三倍活动。
-
-        两种活动共用横幅区域，但文案和每次电量消耗不同。倍数只影响游戏发放的奖励份数，
-        临时计划仍按实战模拟室每张20电量、区域巡防每次60电量计算可执行次数。
-        """
+        """检查实战模拟室和区域巡防的多倍活动，并按剩余次数和当前电量生成临时计划。"""
         # 两个栏目的横幅布局相同：左侧识别活动倍数，右侧识别剩余/总次数
         activity_area = self.ctx.screen_loader.get_area(
             '快捷手册', '多倍活动存在特征区'
@@ -181,39 +179,41 @@ class ChargePlanApp(ZApplication):
             ('区域巡防', 60),  # 每次 60 电量
         )
 
-        # 依次切换到两个栏目，使用同一组横幅区域检查活动
+        # 依次切换到实战模拟室和区域巡防两个栏目，并使用相同的横幅区域来检查对应的多倍活动
         for category_name, charge_per_run in event_list:
             op = TransportByCompendium(self.ctx, '训练', category_name)
             op_result = self.round_by_op_result(op.execute())
             if not op_result.is_success:
                 return op_result
 
-            # 左侧文案只用于判断是否有双倍或三倍活动
+            # 横幅文案部分（多倍活动存在特征区），用于判断是否有多倍活动
             screen = self.screenshot()
             activity_part = cv2_utils.crop_image_only(screen, activity_area.rect)
             activity_text = self.ctx.ocr.run_ocr_single_line(activity_part)
             if not self._is_reward_event(activity_text):
                 continue
 
-            # 右侧剩余量中，实战模拟室指怪物卡数，区域巡防指挑战次数
+            # 横幅数字部分（多倍活动剩余次数区），实战模拟室可指卡片数量，区域巡防可指挑战次数
             reward_times_part = cv2_utils.crop_image_only(screen, reward_times_area.rect)
             reward_times_text = self.ctx.ocr.run_ocr_single_line(reward_times_part)
             times_left = self._get_reward_times(reward_times_text)
             if times_left is None:
                 return self.round_retry('多倍活动识别出错', wait=1)
 
-            # 活动倍数不影响消耗，取当前电量可执行次数与活动剩余次数的较小值
+            # 活动倍数不影响消耗，执行数量取活动剩余数量与当前电量可承担数量的较小值
             executable_times = min(self.battery_charge // charge_per_run, times_left)
             if executable_times <= 0:
                 continue
 
-            # 实战模拟室选对应数量的怪物卡，区域巡防按对应次数「再来一次」
+            # 执行数量：实战模拟室选对应数量的卡片（游戏内上限为5）进行单次挑战，区域巡防按对应次数进行多次挑战
             if category_name == '实战模拟室':
+                # 实战模拟室活动总数通常固定为5，所以「剩余/总数」可在单次挑战中搞定
                 temp_plan = self.config.combat_simulation_double_reward_config
                 temp_plan.card_num = str(executable_times)
                 temp_plan.run_times = 1
                 temp_plan.plan_times = 1
             else:
+                # 区域巡防活动总数通常为2，活动剩余次数=多次挑战次数
                 temp_plan = self.config.area_patrol_double_reward_config
                 if temp_plan.category_name != category_name:
                     continue
