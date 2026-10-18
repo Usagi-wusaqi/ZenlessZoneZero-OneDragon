@@ -29,6 +29,8 @@ class QqBot(PushChannel):
     _TOKEN_URL: str = 'https://bots.qq.com/app/getAppAccessToken'
     _API_BASE_URL: str = 'https://api.sgroup.qq.com'
 
+    _MAX_RETRY: int = 3  # 幂等请求的重试次数，首次之外最多再试 3 次
+    _RETRY_DELAY: float = 1.5  # 重试基础间隔（秒），按次数翻倍
 
     # access_token 缓存，避免每次推送都换 token 触发限频；换了 AppID 就重新取
     _last_access_token_info: tuple[str, str, float] = ('', '', 0.0)
@@ -219,6 +221,7 @@ class QqBot(PushChannel):
                 self._TOKEN_URL,
                 {'appId': app_id, 'clientSecret': client_secret},
                 proxies,
+                retries=self._MAX_RETRY,
             )
             if data is None:
                 return '', f"获取 access_token 失败：{err}"
@@ -255,29 +258,47 @@ class QqBot(PushChannel):
         payload: dict[str, object],
         proxies: dict[str, str | None],
         access_token: str | None = None,
+        retries: int = 0,
         timeout: int = 15,
     ) -> tuple[dict[str, object] | None, str]:
-        """POST JSON，返回 (响应体, 错误信息)"""
+        """
+        POST JSON，返回 (响应体, 错误信息)。
+
+        retries > 0 只给幂等请求（换 token、分片上传）用；发消息非幂等，保持默认的不重试。
+        只有没拿到响应（网络异常）和服务端临时故障才重试，业务错误重试也没用。
+        """
         headers = {'Content-Type': 'application/json'}
         if access_token is not None:
             headers['Authorization'] = f'QQBot {access_token}'
 
-        try:
-            response = requests.post(url, json=payload, headers=headers, proxies=proxies, timeout=timeout)
-        except requests.RequestException as e:
-            return None, f'请求异常：{e}'
+        err = ''
+        for attempt in range(retries + 1):
+            try:
+                response = requests.post(url, json=payload, headers=headers, proxies=proxies, timeout=timeout)
+            except requests.RequestException as e:
+                err = f'请求异常：{e}'
+            else:
+                detail = (response.text or '').strip() or f"HTTP {response.status_code}"
+                if response.status_code < 400:
+                    try:
+                        data = json.loads(detail)
+                    except ValueError:
+                        return None, f'响应不是 JSON 对象：{detail}'
+                    if not isinstance(data, dict):
+                        return None, f'响应不是 JSON 对象：{detail}'
+                    # 业务错误也会随 HTTP 200 返回
+                    if not data.get('code'):
+                        return data, ''
+                    return None, f"接口返回错误码 {data.get('code')}：{data.get('message') or detail}"
 
-        detail = (response.text or '').strip() or f"HTTP {response.status_code}"
-        if response.status_code >= 400:
-            return None, f'请求失败（HTTP {response.status_code}）：{detail}'
+                err = f'请求失败（HTTP {response.status_code}）：{detail}'
+                # 400 可能携带可重试的业务码（如分片未就绪），按可重试处理
+                if response.status_code < 500 and response.status_code not in (400, 429):
+                    return None, err
 
-        try:
-            data = json.loads(detail)
-        except ValueError:
-            return None, f'响应不是 JSON 对象：{detail}'
-        if not isinstance(data, dict):
-            return None, f'响应不是 JSON 对象：{detail}'
-        # 业务错误也会随 HTTP 200 返回
-        if not data.get('code'):
-            return data, ''
-        return None, f"接口返回错误码 {data.get('code')}：{data.get('message') or detail}"
+            if attempt < retries:
+                delay = self._RETRY_DELAY * (2 ** attempt)
+                log.warning(f'QQ 官方机器人{err}，{delay:.1f} 秒后重试')
+                time.sleep(delay)
+
+        return None, err
