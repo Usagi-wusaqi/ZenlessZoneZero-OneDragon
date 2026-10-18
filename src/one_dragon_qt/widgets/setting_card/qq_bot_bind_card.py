@@ -3,7 +3,7 @@ import threading
 from collections.abc import Callable
 
 from PySide6.QtCore import QThread, Signal
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 from qfluentwidgets import FluentIcon, InfoBar, PushButton
 
 from one_dragon.base.push.channel.qq_bot import (
@@ -128,6 +128,9 @@ class QQBotBindCard(MultiPushSettingCard):
             parent=parent,
         )
 
+        # 绑定最长要等 60 秒，退出时先取消再等线程收尾，否则线程还在跑就被父对象析构，Qt 会直接终止进程
+        QApplication.instance().aboutToQuit.connect(self._stop_runner)
+
     def _start_bind(self, is_group: bool) -> None:
         """
         开始绑定接收方
@@ -156,6 +159,18 @@ class QQBotBindCard(MultiPushSettingCard):
         """取消绑定，断开网关连接"""
         if self._runner is not None:
             self._runner.cancel()
+
+    def _stop_runner(self) -> None:
+        """程序退出前停掉绑定线程，避免线程还在跑就被父对象析构"""
+        runner = self._runner
+        if runner is None:
+            return
+
+        # 退出路径上不需要再弹“已取消绑定”的提示
+        runner.result_signal.disconnect(self._on_bind_result)
+        runner.cancel()
+        if not runner.wait(3000):
+            log.warning('QQ 机器人绑定线程未在退出前结束')
 
     def _show_verify_code(self, msg: str) -> None:
         """验证码另弹一条不自动消失的提示，卡片里那行灰色小字容易被忽略"""
