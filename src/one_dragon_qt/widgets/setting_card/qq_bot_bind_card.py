@@ -16,7 +16,7 @@ from one_dragon_qt.widgets.setting_card.multi_push_setting_card import (
 )
 
 
-class QqBotBindRunner(QThread):
+class QQBotBindRunner(QThread):
     """后台跑 QQ 机器人绑定，等验证码期间不阻塞界面"""
 
     status_signal = Signal(str)
@@ -85,7 +85,7 @@ class QqBotBindRunner(QThread):
         self.verify_signal.emit(msg)
 
 
-class QqBotBindCard(MultiPushSettingCard):
+class QQBotBindCard(MultiPushSettingCard):
     """QQ 官方机器人接收方绑定卡片
 
     单聊和群聊的 openid 只能从机器人网关收到的事件里取，卡片提供两个绑定按钮，
@@ -108,7 +108,7 @@ class QqBotBindCard(MultiPushSettingCard):
             parent: 父组件
         """
         self._get_app_credentials: Callable[[], tuple[str, str]] = get_app_credentials
-        self._runner: QqBotBindRunner | None = None
+        self._runner: QQBotBindRunner | None = None
         self._verify_bar: InfoBar | None = None
 
         self.bind_user_btn = PushButton(text='绑定单聊', icon=FluentIcon.PEOPLE)
@@ -143,7 +143,7 @@ class QqBotBindCard(MultiPushSettingCard):
             self.bind_failed.emit('请先填写 AppID 与 AppSecret，再点绑定')
             return
 
-        self._runner = QqBotBindRunner(app_id, client_secret, is_group, self)
+        self._runner = QQBotBindRunner(app_id, client_secret, is_group, self)
         self._runner.status_signal.connect(self.setContent)
         self._runner.verify_signal.connect(self._show_verify_code)
         self._runner.result_signal.connect(self._on_bind_result)

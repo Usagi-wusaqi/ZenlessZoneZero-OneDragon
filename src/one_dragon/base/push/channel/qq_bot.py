@@ -43,7 +43,7 @@ _ERROR_HINTS: dict[int, str] = {
 }
 
 
-class QqBot(PushChannel):
+class QQBot(PushChannel):
     """QQ 官方机器人推送渠道实现类"""
 
     # 换取 access_token 的地址、机器人消息接口的基础地址
@@ -112,7 +112,7 @@ class QqBot(PushChannel):
     @staticmethod
     def _error_hint(code: object) -> str:
         """把平台错误码翻译成一句人话，没有对应说明时返回空串"""
-        hint = _ERROR_HINTS.get(QqBot._to_int(code, 0))
+        hint = _ERROR_HINTS.get(QQBot._to_int(code, 0))
         return f'（{hint}）' if hint else ''
 
     def push(
@@ -696,7 +696,7 @@ def _open_session(
 
     # 复用渠道的取 token 逻辑，绑定与推送走同一套地址和重试；直连，不读系统代理
     proxies: dict[str, str | None] = {'http': None, 'https': None, 'all': None}
-    access_token, err = QqBot()._get_access_token(app_id, client_secret, proxies)
+    access_token, err = QQBot()._get_access_token(app_id, client_secret, proxies)
     if len(err) > 0:
         return None, err
 

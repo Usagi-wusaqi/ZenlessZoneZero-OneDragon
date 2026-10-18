@@ -38,7 +38,7 @@ from one_dragon_qt.widgets.setting_card.key_value_setting_card import (
 from one_dragon_qt.widgets.setting_card.multi_push_setting_card import (
     MultiPushSettingCard,
 )
-from one_dragon_qt.widgets.setting_card.qq_bot_bind_card import QqBotBindCard
+from one_dragon_qt.widgets.setting_card.qq_bot_bind_card import QQBotBindCard
 from one_dragon_qt.widgets.setting_card.switch_setting_card import SwitchSettingCard
 from one_dragon_qt.widgets.setting_card.text_setting_card import TextSettingCard
 from one_dragon_qt.widgets.setting_card.yaml_config_adapter import YamlConfigAdapter
@@ -143,7 +143,7 @@ class SettingPushInterface(VerticalScrollInterface):
         self.email_service_opt.setVisible(False)
 
         # QQ 官方机器人的接收方 openid 只能从机器人网关收到的事件里取，用绑定按钮自动回填
-        self.qq_bot_bind_card = QqBotBindCard(get_app_credentials=self._get_qq_bot_credentials)
+        self.qq_bot_bind_card = QQBotBindCard(get_app_credentials=self._get_qq_bot_credentials)
         self.qq_bot_bind_card.openid_bound.connect(self._on_qq_bot_openid_bound)
         self.qq_bot_bind_card.bind_failed.connect(self._show_error_message)
         self.qq_bot_bind_card.setVisible(False)
