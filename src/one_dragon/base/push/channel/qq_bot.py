@@ -7,6 +7,7 @@ QQ 官方机器人推送渠道
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 import time
@@ -31,6 +32,8 @@ class QqBot(PushChannel):
 
     _MAX_RETRY: int = 3  # 幂等请求的重试次数，首次之外最多再试 3 次
     _RETRY_DELAY: float = 1.5  # 重试基础间隔（秒），按次数翻倍
+    _FILE_TYPE_IMAGE: int = 1  # 富媒体上传的文件类型：图片
+    _MD5_10M_SIZE: int = 10002432  # 秒传校验用：文件前 10002432 字节
 
     # access_token 缓存，避免每次推送都换 token 触发限频；换了 AppID 就重新取
     _last_access_token_info: tuple[str, str, float] = ('', '', 0.0)
@@ -101,14 +104,14 @@ class QqBot(PushChannel):
             config: 配置字典，包含 APP_ID、CLIENT_SECRET、OPENID、GROUP_OPENID
             title: 消息标题
             content: 消息内容
-            image: 图片数据（可选）
+            image: 图片数据（可选，走富媒体分片上传）
             proxy_url: 代理地址
 
         Returns:
             tuple[bool, str]: 是否成功、错误信息
         """
         try:
-            return self._send(config, title, content, proxy_url)
+            return self._send(config, title, content, image, proxy_url)
         except Exception as e:
             log.error('QQ 官方机器人推送异常', exc_info=True)
             return False, f'推送异常：{e}'
@@ -144,9 +147,10 @@ class QqBot(PushChannel):
         config: dict[str, str],
         title: str,
         content: str,
+        image: MatLike | None,
         proxy_url: str | None,
     ) -> tuple[bool, str]:
-        """逐个接收目标发送消息。单个目标失败不影响其他目标，但有接收方没收到就按失败返回。"""
+        """逐个接收目标发送消息，最后附图。单个目标失败不影响其他目标，但有接收方没收到就按失败返回，图片失败只降级为纯文本。"""
         ok, msg = self.validate_config(config)
         if not ok:
             log.error(f"QQ 官方机器人校验失败：{msg}")
@@ -177,6 +181,13 @@ class QqBot(PushChannel):
                 continue
 
             ok_count += 1
+
+            if image is None:
+                continue
+            ok, err = self._send_image(base_path, image, access_token, proxies)
+            if not ok:
+                # 文本已经送达，图片失败只记警告，不把整次推送判为失败
+                log.warning(f"QQ 官方机器人{target_name}图片发送失败，已降级为纯文本：{err}")
 
         if len(errors) > 0:
             # 有接收方没收到就按失败返回：只返回成功的话调用方只会提示成功，错误被吞掉
@@ -251,6 +262,155 @@ class QqBot(PushChannel):
             timeout=20,
         )
         return data is not None, err
+
+    def _send_image(
+        self,
+        base_path: str,
+        image: MatLike,
+        access_token: str,
+        proxies: dict[str, str | None],
+    ) -> tuple[bool, str]:
+        """发送图片消息（msg_type=7）：先分片上传换 file_info，再发富媒体消息"""
+        image_io = self.image_to_bytes(image)
+        if image_io is None:
+            return False, '图片转换失败'
+
+        file_info, err = self._upload_image(base_path, image_io.getvalue(), access_token, proxies)
+        if len(err) > 0:
+            return False, err
+
+        ok, err = self._send_message(
+            base_path,
+            {'msg_type': 7, 'media': {'file_info': file_info}},
+            access_token,
+            proxies,
+        )
+        return ok, err
+
+    def _upload_image(
+        self,
+        base_path: str,
+        image_bytes: bytes,
+        access_token: str,
+        proxies: dict[str, str | None],
+    ) -> tuple[str, str]:
+        """
+        分片上传图片换 file_info：upload_prepare 拿分片地址 -> 逐片 PUT -> upload_part_finish -> files 合并。
+        单聊与群聊的上传接口不互通，必须走对应目标的路径。上传幂等，各步都可重试。
+        """
+        file_name = 'screenshot.jpg'
+        prepared, err = self._post(
+            f"{self._API_BASE_URL}{base_path}/upload_prepare",
+            {
+                'file_type': self._FILE_TYPE_IMAGE,
+                'file_size': str(len(image_bytes)),
+                'file_name': file_name,
+                'md5': hashlib.md5(image_bytes).hexdigest(),
+                'sha1': hashlib.sha1(image_bytes).hexdigest(),
+                'md5_10m': hashlib.md5(image_bytes[: self._MD5_10M_SIZE]).hexdigest(),
+            },
+            proxies,
+            access_token=access_token,
+            retries=self._MAX_RETRY,
+            timeout=20,
+        )
+        if prepared is None:
+            return '', f'上传准备失败：{err}'
+
+        upload_id = str(prepared.get('upload_id') or '')
+        parts = prepared.get('parts')
+        if len(upload_id) == 0 or not isinstance(parts, list):
+            return '', f'上传准备返回不完整：{prepared}'
+
+        default_block_size = self._to_int(prepared.get('block_size'), 0)
+        offset = 0
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+
+            block_size = self._to_int(part.get('block_size'), default_block_size)
+            chunk = image_bytes[offset: offset + block_size] if block_size > 0 else image_bytes[offset:]
+            if len(chunk) == 0:
+                break
+
+            presigned_url = str(part.get('presigned_url') or '')
+            if len(presigned_url) == 0:
+                return '', '上传准备未返回分片地址'
+
+            ok, err = self._put_chunk(presigned_url, chunk, proxies)
+            if not ok:
+                return '', err
+
+            _, err = self._post(
+                f"{self._API_BASE_URL}{base_path}/upload_part_finish",
+                {
+                    'upload_id': upload_id,
+                    'part_index': part.get('index'),
+                    'block_size': str(len(chunk)),
+                    'md5': hashlib.md5(chunk).hexdigest(),
+                },
+                proxies,
+                access_token=access_token,
+                retries=self._MAX_RETRY,
+                timeout=20,
+            )
+            if len(err) > 0:
+                return '', f'分片确认失败：{err}'
+            offset += len(chunk)
+
+        # 合并分片，取回 file_info
+        merged, err = self._post(
+            f"{self._API_BASE_URL}{base_path}/files",
+            {
+                'file_type': self._FILE_TYPE_IMAGE,
+                'upload_id': upload_id,
+            },
+            proxies,
+            access_token=access_token,
+            retries=self._MAX_RETRY,
+            timeout=20,
+        )
+        if merged is None:
+            return '', f'分片合并失败：{err}'
+
+        file_info = str(merged.get('file_info') or '')
+        if len(file_info) == 0:
+            return '', f'分片合并未返回 file_info：{merged}'
+        return file_info, ''
+
+    def _put_chunk(
+        self,
+        presigned_url: str,
+        chunk: bytes,
+        proxies: dict[str, str | None],
+    ) -> tuple[bool, str]:
+        """通过预签名地址 PUT 上传单个分片，网络异常与 400/429/5xx 重试"""
+        err = ''
+        for attempt in range(self._MAX_RETRY + 1):
+            try:
+                response = requests.put(
+                    presigned_url,
+                    data=chunk,
+                    headers={'Content-Type': 'application/octet-stream'},
+                    proxies=proxies,
+                    timeout=60,
+                )
+            except requests.RequestException as e:
+                err = f'分片上传请求异常：{e}'
+            else:
+                if response.status_code < 300:
+                    return True, ''
+                detail = (response.text or '').strip() or f"HTTP {response.status_code}"
+                err = f'分片上传失败（HTTP {response.status_code}）：{detail}'
+                if response.status_code < 500 and response.status_code not in (400, 429):
+                    return False, err
+
+            if attempt < self._MAX_RETRY:
+                delay = self._RETRY_DELAY * (2 ** attempt)
+                log.warning(f'QQ 官方机器人{err}，{delay:.1f} 秒后重试')
+                time.sleep(delay)
+
+        return False, err
 
     def _post(
         self,
