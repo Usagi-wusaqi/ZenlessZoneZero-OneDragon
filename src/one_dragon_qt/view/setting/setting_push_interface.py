@@ -1,3 +1,4 @@
+import contextlib
 import json
 
 import cv2
@@ -56,6 +57,7 @@ class SettingPushInterface(VerticalScrollInterface):
             nav_icon=FluentIcon.MESSAGE
         )
         self.ctx = ctx
+        self._error_bar: InfoBar | None = None
 
     def get_content_widget(self) -> QWidget:
         content_widget = Column()
@@ -450,8 +452,19 @@ class SettingPushInterface(VerticalScrollInterface):
         except (json.JSONDecodeError, TypeError):
             return False
 
+    def _clear_error_bar(self) -> None:
+        """关闭常驻的错误提示"""
+        if self._error_bar is None:
+            return
+
+        # 用户手动点掉后底层对象可能已被删除
+        with contextlib.suppress(RuntimeError):
+            self._error_bar.close()
+        self._error_bar = None
+
     def _show_success_message(self, message: str):
         """显示成功消息提示"""
+        self._clear_error_bar()
         InfoBar.success(
             title='成功',
             content=message,
@@ -462,12 +475,13 @@ class SettingPushInterface(VerticalScrollInterface):
         )
 
     def _show_error_message(self, message: str):
-        """显示错误消息提示"""
-        InfoBar.error(
+        """显示错误消息提示，不自动消失，新的错误替换旧的"""
+        self._clear_error_bar()
+        self._error_bar = InfoBar.error(
             title='错误',
             content=message,
             orient=InfoBarPosition.TOP,
             isClosable=True,
-            duration=5000,
+            duration=-1,
             parent=self
         )
