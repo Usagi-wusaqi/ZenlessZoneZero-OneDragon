@@ -2,7 +2,8 @@
 QQ 官方机器人推送渠道
 
 通过 QQ 开放平台的机器人接口发送单聊（C2C）与群聊消息，不需要部署 OneBot / NapCat 等协议端。
-收件方用 openid / group_openid 标识。
+收件方用 openid / group_openid 标识，两者都没有查询接口，只能从机器人网关的事件里取，
+界面上点“绑定”按钮走本文件的绑定流程自动获取。
 """
 
 from __future__ import annotations
@@ -10,10 +11,13 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import random
 import threading
 import time
+from collections.abc import Callable, Iterator
 
 import requests
+import websocket
 from cv2.typing import MatLike
 
 from one_dragon.base.push.push_channel import PushChannel
@@ -22,6 +26,11 @@ from one_dragon.base.push.push_channel_config import (
     PushChannelConfigField,
 )
 from one_dragon.utils.log_utils import log
+
+_GATEWAY_URL: str = 'https://api.sgroup.qq.com/gateway'
+_INTENTS: int = 33554432  # 1 << 25，群聊与单聊事件
+_BIND_TIMEOUT_SECONDS: int = 60  # 绑定整体超时
+_RECV_TIMEOUT_SECONDS: float = 1.0  # 单次收消息超时，用来定期检查取消并发送心跳
 
 # 平台侧常见拒绝原因，拼在错误信息后面，省得用户拿错误码去查文档
 _ERROR_HINTS: dict[int, str] = {
@@ -481,3 +490,282 @@ class QqBot(PushChannel):
                 time.sleep(delay)
 
         return None, err
+
+
+def bind_user_openid(
+    app_id: str,
+    client_secret: str,
+    on_verify_code: Callable[[str], None],
+    cancel_event: threading.Event,
+) -> tuple[str, str]:
+    """
+    等用户在 QQ 里私聊机器人发送验证码，获取单聊 openid
+
+    Args:
+        app_id: 机器人 AppID
+        client_secret: 机器人 AppSecret
+        on_verify_code: 拿到验证码后的回调，界面用它提示用户发什么
+        cancel_event: 用户取消绑定时置位
+
+    Returns:
+        tuple[str, str]: 单聊 openid、错误信息
+    """
+    session, err = _open_session(
+        app_id,
+        client_secret,
+        cancel_event,
+        time.time() + _BIND_TIMEOUT_SECONDS,
+        auth_message='QQ 机器人鉴权失败，请检查 AppID/AppSecret，并确认已开通单聊事件权限',
+        timeout_message='绑定超时，请在 60 秒内用手机 QQ 私聊机器人发送验证码',
+    )
+    if session is None:
+        return '', err
+
+    try:
+        # Identify 发出后即可显示验证码，READY 事件在接收循环里被忽略
+        verify_code = _generate_verify_code()
+        on_verify_code(verify_code)
+
+        for event_type, data in session.events():
+            if event_type == 'C2C_MESSAGE_CREATE':
+                author = data.get('author')
+                openid = str(author.get('user_openid') or '') if isinstance(author, dict) else ''
+                if len(openid) > 0 and verify_code in str(data.get('content') or ''):
+                    return openid, ''
+            elif event_type == 'FRIEND_ADD':
+                openid = str(data.get('openid') or '')
+                if len(openid) > 0:
+                    return openid, ''
+        return '', session.error
+    finally:
+        session.close()
+
+
+def bind_group_openid(
+    app_id: str,
+    client_secret: str,
+    on_verify_code: Callable[[str], None],
+    on_status: Callable[[str], None],
+    cancel_event: threading.Event,
+) -> tuple[str, str]:
+    """
+    等机器人被拉进群，或用户在群里 @机器人 发送验证码，获取群 group_openid
+
+    Args:
+        app_id: 机器人 AppID
+        client_secret: 机器人 AppSecret
+        on_verify_code: 拿到验证码后的回调，界面用它提示用户发什么
+        on_status: 收到群消息但不是有效验证码时的回调
+        cancel_event: 用户取消绑定时置位
+
+    Returns:
+        tuple[str, str]: 群 openid、错误信息
+    """
+    session, err = _open_session(
+        app_id,
+        client_secret,
+        cancel_event,
+        time.time() + _BIND_TIMEOUT_SECONDS,
+        auth_message='QQ 机器人鉴权失败，请检查 AppID/AppSecret，并确认已开通群聊事件权限',
+        timeout_message='绑定超时，请在 60 秒内把机器人拉进群，或在群里 @机器人 发送验证码',
+    )
+    if session is None:
+        return '', err
+
+    try:
+        # 群聊要等 READY 再提示验证码，否则用户在订阅生效前把机器人拉进群，入群事件会丢
+        if not session.wait_ready():
+            return '', session.error
+
+        verify_code = _generate_verify_code()
+        on_verify_code(verify_code)
+
+        for event_type, data in session.events():
+            group_openid = str(data.get('group_openid') or '')
+            if event_type in ('GROUP_AT_MESSAGE_CREATE', 'GROUP_MESSAGE_CREATE'):
+                matched = verify_code in str(data.get('content') or '')
+                if len(group_openid) > 0 and matched:
+                    return group_openid, ''
+                on_status('已收到群内 @机器人消息，但未获取到群 OpenID，请重试' if matched
+                          else '已收到群内 @机器人消息，但验证码不匹配，请发送当前显示的验证码')
+            elif event_type == 'GROUP_ADD_ROBOT':
+                if len(group_openid) > 0:
+                    return group_openid, ''
+                on_status('已收到机器人入群事件，但未获取到群 OpenID，请重试')
+        return '', session.error
+    finally:
+        session.close()
+
+
+class _GatewaySession:
+    """已鉴权的网关连接，负责心跳、事件分发、超时与取消"""
+
+    def __init__(
+        self,
+        ws: websocket.WebSocket,
+        heartbeat_ms: int,
+        deadline: float,
+        cancel_event: threading.Event,
+        auth_message: str,
+        timeout_message: str,
+    ) -> None:
+        self._ws: websocket.WebSocket = ws
+        self._heartbeat_seconds: float = max(heartbeat_ms / 1000, 5)
+        self._deadline: float = deadline
+        self._cancel_event: threading.Event = cancel_event
+        self._auth_message: str = auth_message
+        self._timeout_message: str = timeout_message
+        self._seq: int | None = None
+        self._next_heartbeat: float = time.time() + self._heartbeat_seconds
+        self.error: str = ''
+
+    def wait_ready(self) -> bool:
+        """等到 READY，确认鉴权与事件订阅已生效"""
+        return any(event_type == 'READY' for event_type, _ in self._receive_events())
+
+    def events(self) -> Iterator[tuple[str, dict]]:
+        """持续产出网关推送的事件，连接中断时停下，原因见 error"""
+        yield from self._receive_events()
+
+    def close(self) -> None:
+        _close_quietly(self._ws)
+
+    def _receive_events(self) -> Iterator[tuple[str, dict]]:
+        while True:
+            if self._cancel_event.is_set():
+                self.error = '已取消绑定'
+                return
+            if time.time() > self._deadline:
+                self.error = self._timeout_message
+                return
+
+            try:
+                raw = self._ws.recv()
+            except websocket.WebSocketTimeoutException:
+                raw = ''
+            except websocket.WebSocketConnectionClosedException:
+                self.error = 'QQ 网关连接已断开，请重试'
+                return
+
+            self._heartbeat()
+
+            if len(raw) == 0:
+                continue
+            try:
+                payload = json.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+
+            if payload.get('s') is not None:
+                self._seq = int(payload['s'])
+
+            op = payload.get('op')
+            if op == 9:
+                self.error = self._auth_message
+                return
+            if op == 0 and len(str(payload.get('t') or '')) > 0:
+                data = payload.get('d')
+                yield str(payload['t']), data if isinstance(data, dict) else {}
+
+    def _heartbeat(self) -> None:
+        now = time.time()
+        if now < self._next_heartbeat:
+            return
+        self._ws.send(json.dumps({'op': 1, 'd': self._seq}))
+        self._next_heartbeat = now + self._heartbeat_seconds
+
+
+def _open_session(
+    app_id: str,
+    client_secret: str,
+    cancel_event: threading.Event,
+    deadline: float,
+    auth_message: str,
+    timeout_message: str,
+) -> tuple[_GatewaySession | None, str]:
+    """
+    换取 token、连上网关并完成鉴权握手
+
+    Returns:
+        tuple[_GatewaySession | None, str]: 网关连接、错误信息
+    """
+    if len(app_id) == 0 or len(client_secret) == 0:
+        return None, '请先填写机器人 AppID 与 AppSecret'
+
+    # 复用渠道的取 token 逻辑，绑定与推送走同一套地址和重试；直连，不读系统代理
+    proxies: dict[str, str | None] = {'http': None, 'https': None, 'all': None}
+    access_token, err = QqBot()._get_access_token(app_id, client_secret, proxies)
+    if len(err) > 0:
+        return None, err
+
+    gateway_url, err = _get_gateway_url(access_token, proxies)
+    if len(err) > 0:
+        return None, err
+
+    try:
+        ws = websocket.create_connection(gateway_url, timeout=10)
+    except websocket.WebSocketException as e:
+        return None, f'连接 QQ 网关失败：{e}'
+
+    try:
+        hello = json.loads(ws.recv())
+    except (websocket.WebSocketException, ValueError) as e:
+        _close_quietly(ws)
+        return None, f'连接 QQ 网关失败：{e}'
+
+    # Hello（op=10）里带心跳间隔，别的 opcode 说明握手异常
+    if hello.get('op') != 10:
+        _close_quietly(ws)
+        return None, f"网关返回异常 opcode {hello.get('op')}，期望 Hello (10)"
+
+    hello_data = hello.get('d') if isinstance(hello.get('d'), dict) else {}
+    try:
+        heartbeat_ms = int(hello_data.get('heartbeat_interval') or 45000)
+    except (TypeError, ValueError):
+        heartbeat_ms = 45000
+
+    try:
+        ws.send(json.dumps({
+            'op': 2,
+            'd': {'token': f'QQBot {access_token}', 'intents': _INTENTS, 'shard': [0, 1]},
+        }))
+    except websocket.WebSocketException as e:
+        _close_quietly(ws)
+        return None, f'连接 QQ 网关失败：{e}'
+
+    # 握手用较长超时，之后靠短超时的收消息循环定期检查取消与发送心跳
+    ws.settimeout(_RECV_TIMEOUT_SECONDS)
+    log.info('QQ 官方机器人已连接网关，等待消息事件')
+    return _GatewaySession(ws, heartbeat_ms, deadline, cancel_event, auth_message, timeout_message), ''
+
+
+def _close_quietly(ws: websocket.WebSocket) -> None:
+    """关闭连接，失败不影响绑定结果"""
+    with contextlib.suppress(Exception):
+        ws.close()
+
+
+def _get_gateway_url(access_token: str, proxies: dict[str, str | None]) -> tuple[str, str]:
+    """获取 WebSocket 网关地址"""
+    try:
+        response = requests.get(
+            _GATEWAY_URL,
+            headers={'Authorization': f'QQBot {access_token}'},
+            proxies=proxies,
+            timeout=15,
+        )
+        data = response.json()
+    except (requests.RequestException, ValueError) as e:
+        return '', f'获取网关地址失败：{e}'
+
+    url = str(data.get('url') or '') if isinstance(data, dict) else ''
+    if len(url) == 0:
+        return '', f'获取网关地址失败：{data}'
+    return url, ''
+
+
+def _generate_verify_code() -> str:
+    """生成 4 位数字验证码，用户发回这条消息即确认是本人"""
+    return ''.join(random.choice('0123456789') for _ in range(4))
