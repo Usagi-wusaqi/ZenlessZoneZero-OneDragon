@@ -282,6 +282,9 @@ class SettingPushInterface(VerticalScrollInterface):
             )
             if not ok:
                 self._show_error_message(msg)
+            elif len(msg) > 0:
+                # 有渠道失败但其他渠道成功时 ok 仍为 True，错误信息只在这里带回来
+                self._show_error_message(msg)
             else:
                 self._show_success_message("已向所有已配置的通知方式发送测试消息")
         except ValueError as e:
