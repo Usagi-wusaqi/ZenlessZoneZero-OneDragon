@@ -63,6 +63,7 @@ if not getattr(sys, 'frozen', False):
     import vgamepad
     import warnings
     import webbrowser
+    import websocket
     import win32api
     import win32clipboard
     import win32con
