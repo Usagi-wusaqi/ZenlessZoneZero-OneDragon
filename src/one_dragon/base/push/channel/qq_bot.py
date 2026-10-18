@@ -7,6 +7,7 @@ QQ 官方机器人推送渠道
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import threading
@@ -21,6 +22,16 @@ from one_dragon.base.push.push_channel_config import (
     PushChannelConfigField,
 )
 from one_dragon.utils.log_utils import log
+
+# 平台侧常见拒绝原因，拼在错误信息后面，省得用户拿错误码去查文档
+_ERROR_HINTS: dict[int, str] = {
+    40034105: '主动消息无权限：群聊需群主在手机 QQ 的群机器人设置里打开“机器人在群内主动发言”',
+    40034100: '主动消息发送太频繁：同一接收方每分钟最多 20 条、每天最多 1000 条',
+    40054004: '机器人还没添加对方为好友，单聊需先把机器人加为好友',
+    40054013: '接收方拒收了消息：需要接收方在手机 QQ 打开该机器人资料页，开启“接收机器人推送”',
+    40054007: '消息长度超出上限',
+    40034011: 'markdown 内容无效',
+}
 
 
 class QqBot(PushChannel):
@@ -88,6 +99,12 @@ class QqBot(PushChannel):
             return int(str(value))
         except (TypeError, ValueError):
             return default
+
+    @staticmethod
+    def _error_hint(code: object) -> str:
+        """把平台错误码翻译成一句人话，没有对应说明时返回空串"""
+        hint = _ERROR_HINTS.get(QqBot._to_int(code, 0))
+        return f'（{hint}）' if hint else ''
 
     def push(
         self,
@@ -449,9 +466,11 @@ class QqBot(PushChannel):
                     # 业务错误也会随 HTTP 200 返回
                     if not data.get('code'):
                         return data, ''
-                    return None, f"接口返回错误码 {data.get('code')}：{data.get('message') or detail}"
+                    return None, f"接口返回错误码 {data.get('code')}：{data.get('message') or detail}{self._error_hint(data.get('code'))}"
 
                 err = f'请求失败（HTTP {response.status_code}）：{detail}'
+                with contextlib.suppress(ValueError, AttributeError):
+                    err += self._error_hint(json.loads(detail).get('code'))
                 # 400 可能携带可重试的业务码（如分片未就绪），按可重试处理
                 if response.status_code < 500 and response.status_code not in (400, 429):
                     return None, err
