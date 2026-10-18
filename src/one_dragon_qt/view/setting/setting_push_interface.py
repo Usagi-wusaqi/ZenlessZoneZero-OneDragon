@@ -37,6 +37,7 @@ from one_dragon_qt.widgets.setting_card.key_value_setting_card import (
 from one_dragon_qt.widgets.setting_card.multi_push_setting_card import (
     MultiPushSettingCard,
 )
+from one_dragon_qt.widgets.setting_card.qq_bot_bind_card import QqBotBindCard
 from one_dragon_qt.widgets.setting_card.switch_setting_card import SwitchSettingCard
 from one_dragon_qt.widgets.setting_card.text_setting_card import TextSettingCard
 from one_dragon_qt.widgets.setting_card.yaml_config_adapter import YamlConfigAdapter
@@ -139,6 +140,12 @@ class SettingPushInterface(VerticalScrollInterface):
         self.email_service_opt.combo_box.setCurrentIndex(-1)
         self.email_service_opt.setVisible(False)
 
+        # QQ 官方机器人的接收方 openid 只能从机器人网关收到的事件里取，用绑定按钮自动回填
+        self.qq_bot_bind_card = QqBotBindCard(get_app_credentials=self._get_qq_bot_credentials)
+        self.qq_bot_bind_card.openid_bound.connect(self._on_qq_bot_openid_bound)
+        self.qq_bot_bind_card.bind_failed.connect(self._show_error_message)
+        self.qq_bot_bind_card.setVisible(False)
+
         # 按渠道组织卡片
         self.push_channel_cards: dict[str, list] = {}
         for channel in self.ctx.push_service.channels:
@@ -152,6 +159,11 @@ class SettingPushInterface(VerticalScrollInterface):
                 channel_group.addSettingCard(self.curl_btn)
 
             for field in channel.config_schema:
+                # QQ 官方机器人的绑定按钮放在接收方字段上方
+                if channel.channel_id == 'QQ_BOT' and field.var_suffix == 'OPENID':
+                    channel_cards.append(self.qq_bot_bind_card)
+                    channel_group.addSettingCard(self.qq_bot_bind_card)
+
                 card = self._create_card(channel.channel_id, field)
                 channel_cards.append(card)
                 channel_group.addSettingCard(card)
@@ -334,6 +346,24 @@ class SettingPushInterface(VerticalScrollInterface):
     def _set_proxy_input_visibility(self):
         """设置代理输入框的可见性"""
         self.proxy_input_opt.setVisible(self.proxy_opt.getValue() == PushProxy.PERSONAL.value.value)
+
+    def _get_qq_bot_credentials(self) -> tuple[str, str]:
+        """取 QQ 机器人配置里的 AppID 与 AppSecret"""
+        channel_config = self.ctx.push_service.get_channel_config('QQ_BOT')
+        return channel_config.get('APP_ID', ''), channel_config.get('CLIENT_SECRET', '')
+
+    def _on_qq_bot_openid_bound(self, is_group: bool, openid: str) -> None:
+        """绑定成功，写进配置并回填输入框"""
+        field_name = 'GROUP_OPENID' if is_group else 'OPENID'
+        self.ctx.push_service.push_config.update_channel_config_value('QQ_BOT', field_name, openid)
+
+        card: TextSettingCard | None = getattr(self, f'qq_bot_{field_name.lower()}_push_card', None)
+        if card is not None:
+            card.setValue(openid)
+            if card.adapter is not None:
+                card.adapter.set_value(openid)
+
+        self._show_success_message('绑定成功')
 
     def on_interface_shown(self) -> None:
         VerticalScrollInterface.on_interface_shown(self)
