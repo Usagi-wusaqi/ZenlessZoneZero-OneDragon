@@ -10,6 +10,16 @@ from one_dragon.utils import os_utils
 ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
 
 
+def _launch_env() -> dict[str, str]:
+    """
+    构造拉起启动器时使用的进程环境
+    启动器本身是打包程序 运行时会把解压目录写入 _PYI_ 开头的环境变量
+    子进程继承后会跳过解压并直接复用已失效的目录 加载 Python DLL 失败而无法启动
+    因此拉起新的启动器时必须剔除这些变量
+    """
+    return {key: value for key, value in os.environ.items() if not key.startswith('_PYI_')}
+
+
 def start_one_dragon(restart: bool) -> None:
     """
     启动一条龙脚本
@@ -20,7 +30,9 @@ def start_one_dragon(restart: bool) -> None:
         launcher_path = Path(sys.executable)
     else:
         launcher_path = Path(os_utils.get_work_dir()) / 'OneDragon-Launcher.exe'
-    subprocess.Popen(f'cmd /c "start "" "{launcher_path}""', shell=True)
+    subprocess.Popen(
+        f'cmd /c "start "" "{launcher_path}""', shell=True, env=_launch_env()
+    )
     if restart:
         sys.exit(0)
 
