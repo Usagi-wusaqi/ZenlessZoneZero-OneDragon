@@ -13,6 +13,7 @@ if not getattr(sys, 'frozen', False):
     import cv2
     import datetime
     import difflib
+    import gc
     import gettext
     import glob
     import hashlib
@@ -98,11 +99,13 @@ if not getattr(sys, 'frozen', False):
     from email.utils import formataddr
     from enum import Enum, IntEnum, StrEnum
     from functools import cached_property, lru_cache, partial, wraps
+    from importlib import metadata
     from io import BytesIO
     from logging import DEBUG
     from logging.handlers import TimedRotatingFileHandler
+    from math import isfinite
     from packaging import version
-    from pathlib import Path
+    from pathlib import Path, PurePosixPath, PureWindowsPath
     from pyautogui import screenshot
     from pygetwindow import Win32Window
     from pygit2 import Blob, Commit, Oid, Remote, RemoteCallbacks, Repository, Walker, discover_repository, init_repository, settings
@@ -128,7 +131,8 @@ if not getattr(sys, 'frozen', False):
     from sklearn.preprocessing import scale
     from soundcard.mediafoundation import SoundcardRuntimeWarning
     from threading import Event, Lock
-    from types import ModuleType
+    from types import ModuleType, TracebackType
     from typing import Any, Callable, ClassVar, Dict, IO, Iterable, List, Literal, NamedTuple, Optional, Protocol, TYPE_CHECKING, Tuple, Type, TypeVar, Union, cast
     from urllib.parse import urlencode, urlparse
+    from uuid import uuid4
     from yaml import CSafeLoader, SafeLoader
