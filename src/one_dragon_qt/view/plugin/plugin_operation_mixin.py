@@ -578,7 +578,10 @@ class PluginOperationMixin:
 
         archive_name = self._plugin_archive_name(entry)
         save_dir = os_utils.get_path_under_work_dir('config', 'temp', 'plugin_downloads')
-        source_id = self._plugin_download_source(release.download_url)
+        # 索引按下载源给出地址；不指定 source_order，交给下载队列按「资源」页的设置挑选
+        download_urls = release.sources or {
+            self._plugin_download_source(release.download_url): release.download_url
+        }
         spec = ResourceDownloadSpec(
             resource_id=f'plugin:{entry.plugin_id}',
             resource_type='plugin',
@@ -589,10 +592,9 @@ class PluginOperationMixin:
                 CommonDownloaderParam(
                     save_file_path=save_dir,
                     save_file_name=archive_name,
-                    download_urls={source_id: release.download_url},
+                    download_urls=download_urls,
                 )
             ),
-            source_order=[source_id],
             note=action_name,
             after_download=lambda success: self._install_queued_plugin(
                 entry,
